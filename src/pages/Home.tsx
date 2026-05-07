@@ -127,42 +127,52 @@ export default function Home() {
                 </a>
               </div>
             </motion.div>
+
+            {/* Decorative Illustration */}
             <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="hidden lg:block"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+              className="hidden lg:flex items-center justify-center"
             >
-              <div className="relative">
-                <div className="absolute -inset-4 bg-gradient-to-r from-[#d4a843]/20 to-[#1a2744]/20 rounded-3xl blur-2xl" />
-                <div className="relative bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/20">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-white font-medium">Financial Overview</span>
-                    <span className="text-[#d4a843] text-sm">This Year</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white/5 rounded-xl p-4">
-                      <p className="text-slate-400 text-xs mb-1">Net Worth</p>
-                      <p className="text-white text-xl font-bold">₹1.2 Cr</p>
-                      <p className="text-emerald-400 text-xs mt-1">+12.5%</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-4">
-                      <p className="text-slate-400 text-xs mb-1">Monthly Savings</p>
-                      <p className="text-white text-xl font-bold">₹45,000</p>
-                      <p className="text-emerald-400 text-xs mt-1">+8.2%</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-4">
-                      <p className="text-slate-400 text-xs mb-1">Goals on Track</p>
-                      <p className="text-white text-xl font-bold">4/5</p>
-                      <p className="text-[#d4a843] text-xs mt-1">80%</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-4">
-                      <p className="text-slate-400 text-xs mb-1">Investments</p>
-                      <p className="text-white text-xl font-bold">₹38L</p>
-                      <p className="text-emerald-400 text-xs mt-1">+15.3%</p>
-                    </div>
+              <div className="relative w-80 h-80">
+                {/* Outer ring */}
+                <div className="absolute inset-0 rounded-full border-2 border-dashed border-[#d4a843]/30 animate-[spin_30s_linear_infinite]" />
+                {/* Inner ring */}
+                <div className="absolute inset-8 rounded-full border border-white/10" />
+                {/* Center icon */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#d4a843]/20 to-[#1a2744]/40 backdrop-blur-xl border border-[#d4a843]/30 flex items-center justify-center">
+                    <IndianRupee className="w-14 h-14 text-[#d4a843]" />
                   </div>
                 </div>
+                {/* Orbiting icons */}
+                {[
+                  { Icon: Target, angle: 0, label: "Goals" },
+                  { Icon: TrendingUp, angle: 72, label: "Growth" },
+                  { Icon: Shield, angle: 144, label: "Security" },
+                  { Icon: PieChart, angle: 216, label: "Allocate" },
+                  { Icon: CheckCircle2, angle: 288, label: "Track" },
+                ].map(({ Icon, angle, label }) => {
+                  const rad = (angle * Math.PI) / 180;
+                  const x = Math.cos(rad) * 130;
+                  const y = Math.sin(rad) * 130;
+                  return (
+                    <div
+                      key={label}
+                      className="absolute flex flex-col items-center gap-1"
+                      style={{
+                        left: `calc(50% + ${x}px - 20px)`,
+                        top: `calc(50% + ${y}px - 20px)`,
+                      }}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur border border-white/20 flex items-center justify-center">
+                        <Icon className="w-5 h-5 text-[#d4a843]" />
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">{label}</span>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           </div>

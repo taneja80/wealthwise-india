@@ -69,6 +69,8 @@ export const localUsers = pgTable("local_users", {
   email: varchar("email", { length: 320 }).notNull().unique(),
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   name: varchar("name", { length: 255 }),
+  securityQuestion: varchar("securityQuestion", { length: 500 }),
+  securityAnswerHash: varchar("securityAnswerHash", { length: 255 }),
   role: roleEnum("role").default("user").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull().$onUpdate(() => new Date()),

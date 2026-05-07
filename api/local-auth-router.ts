@@ -66,6 +66,8 @@ export const localAuthRouter = createRouter({
         email: z.string().email().max(320),
         password: strongPassword,
         name: z.string().min(1).max(255).optional(),
+        securityQuestion: z.string().min(5).max(500),
+        securityAnswer: z.string().min(1).max(255),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -79,10 +81,13 @@ export const localAuthRouter = createRouter({
         return { success: false, error: "An account with this email already exists" };
       }
       const passwordHash = await bcrypt.hash(input.password, 12);
+      const securityAnswerHash = await bcrypt.hash(input.securityAnswer.toLowerCase().trim(), 10);
       const result = await db.insert(localUsers).values({
         email: input.email,
         passwordHash,
         name: input.name || input.email.split("@")[0],
+        securityQuestion: input.securityQuestion,
+        securityAnswerHash,
       });
       const userId = Number((result as any).insertId);
       const token = await createToken(userId, input.email, "user");
@@ -146,4 +151,46 @@ export const localAuthRouter = createRouter({
     clearLocalAuthCookie(ctx.resHeaders, ctx.req.headers);
     return { success: true };
   }),
+
+  /** Get the security question for an email (for forgot password flow) */
+  getSecurityQuestion: publicQuery
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit(ctx, "auth", RateLimits.auth);
+      const db = getDb();
+      const user = await db.query.localUsers.findFirst({
+        where: eq(localUsers.email, input.email),
+      });
+      if (!user || !user.securityQuestion) {
+        return { success: false, error: "No account found with this email or no security question set" };
+      }
+      return { success: true, securityQuestion: user.securityQuestion };
+    }),
+
+  /** Verify security answer and reset password */
+  resetPassword: publicQuery
+    .input(
+      z.object({
+        email: z.string().email(),
+        securityAnswer: z.string().min(1),
+        newPassword: strongPassword,
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit(ctx, "auth", RateLimits.auth);
+      const db = getDb();
+      const user = await db.query.localUsers.findFirst({
+        where: eq(localUsers.email, input.email),
+      });
+      if (!user || !user.securityAnswerHash) {
+        return { success: false, error: "Invalid email or security question not set" };
+      }
+      const valid = await bcrypt.compare(input.securityAnswer.toLowerCase().trim(), user.securityAnswerHash);
+      if (!valid) {
+        return { success: false, error: "Incorrect security answer" };
+      }
+      const newHash = await bcrypt.hash(input.newPassword, 12);
+      await db.update(localUsers).set({ passwordHash: newHash }).where(eq(localUsers.id, user.id));
+      return { success: true };
+    }),
 });
