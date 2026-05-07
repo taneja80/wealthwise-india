@@ -16,6 +16,11 @@ import {
   Calculator,
   Landmark,
   Shield,
+  Upload,
+  Banknote,
+  Globe,
+  BarChart3,
+  GitCompareArrows,
 } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -25,9 +30,15 @@ const navItems = [
   { label: "Goals", path: "/goals", icon: Target },
   { label: "Cash Flow", path: "/cash-flow", icon: TrendingUp },
   { label: "Asset Classes", path: "/assets", icon: Landmark },
+  { label: "Import Portfolio", path: "/import", icon: Upload },
+  { label: "MF Search", path: "/mf-search", icon: BarChart3 },
   { label: "Retirement", path: "/retirement", icon: Shield },
   { label: "Tax Planning", path: "/tax-planning", icon: Calculator },
   { label: "Allocation", path: "/allocation", icon: PieChart },
+  { label: "SIP Calculator", path: "/sip-calculator", icon: TrendingUp },
+  { label: "EMI Calculator", path: "/emi-calculator", icon: Banknote },
+  { label: "What-If", path: "/what-if", icon: GitCompareArrows },
+  { label: "Currency", path: "/currency", icon: Globe },
   { label: "Advisor", path: "/advisor", icon: MessageSquare },
   { label: "Profile", path: "/profile-setup", icon: User },
 ];

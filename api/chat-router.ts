@@ -2,21 +2,47 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { chatMessages } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { enforceRateLimit, RateLimits } from "./lib/rate-limit";
 
 export const chatRouter = createRouter({
-  getHistory: authedQuery.query(async ({ ctx }) => {
-    const db = getDb();
-    return db.query.chatMessages.findMany({
-      where: eq(chatMessages.userId, ctx.user.id),
-      orderBy: (chatMessages, { asc }) => [asc(chatMessages.createdAt)],
-      limit: 50,
-    });
-  }),
+  getHistory: authedQuery
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      }).default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+
+      // Get total count for pagination metadata
+      const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(chatMessages)
+        .where(eq(chatMessages.userId, ctx.user.id));
+      const total = Number(countResult[0]?.count ?? 0);
+
+      const messages = await db.query.chatMessages.findMany({
+        where: eq(chatMessages.userId, ctx.user.id),
+        orderBy: (chatMessages, { asc }) => [asc(chatMessages.createdAt)],
+        limit: input.limit,
+        offset: input.offset,
+      });
+
+      return {
+        messages,
+        total,
+        hasMore: input.offset + input.limit < total,
+      };
+    }),
 
   send: authedQuery
     .input(z.object({ message: z.string().min(1).max(2000) }))
     .mutation(async ({ ctx, input }) => {
+      // Rate limit chat messages
+      enforceRateLimit(ctx, "chat", RateLimits.chat);
+
       const db = getDb();
       await db.insert(chatMessages).values({
         userId: ctx.user.id,
@@ -80,14 +106,11 @@ Be concise, practical, and culturally aware of Indian financial context. Use rup
 
         return { response: assistantMessage };
       } catch (error) {
-        const fallbackResponse = `I apologize, but I'm currently unable to connect to my knowledge base. As a quick tip: For your financial goals, consider the 50-30-20 rule - allocate 50% of income to needs, 30% to wants, and 20% to savings and investments. In India, starting a monthly SIP in an index fund like Nifty 50 can be a great foundation for long-term wealth creation. Please try your question again in a moment.`;
+        console.error("[chat] AI service error:", error instanceof Error ? error.message : error);
 
-        await db.insert(chatMessages).values({
-          userId: ctx.user.id,
-          role: "assistant",
-          content: fallbackResponse,
-        });
+        const fallbackResponse = "I'm temporarily unable to respond. Please try again in a moment.";
 
+        // Don't persist fallback messages to avoid DB bloat
         return { response: fallbackResponse };
       }
     }),

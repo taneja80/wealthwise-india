@@ -12,6 +12,12 @@ import ChatPage from "./pages/ChatPage";
 import TaxPage from "./pages/TaxPage";
 import AssetPage from "./pages/AssetPage";
 import RetirementPage from "./pages/RetirementPage";
+import ImportPage from "./pages/ImportPage";
+import SIPCalculatorPage from "./pages/SIPCalculatorPage";
+import EMICalculatorPage from "./pages/EMICalculatorPage";
+import CurrencyPage from "./pages/CurrencyPage";
+import MFSearchPage from "./pages/MFSearchPage";
+import WhatIfPage from "./pages/WhatIfPage";
 import { AppLayout } from "./components/Navigation";
 
 function AppRoutes() {
@@ -32,6 +38,12 @@ function AppRoutes() {
         <Route path="/tax-planning" element={<TaxPage />} />
         <Route path="/assets" element={<AssetPage />} />
         <Route path="/retirement" element={<RetirementPage />} />
+        <Route path="/import" element={<ImportPage />} />
+        <Route path="/sip-calculator" element={<SIPCalculatorPage />} />
+        <Route path="/emi-calculator" element={<EMICalculatorPage />} />
+        <Route path="/currency" element={<CurrencyPage />} />
+        <Route path="/mf-search" element={<MFSearchPage />} />
+        <Route path="/what-if" element={<WhatIfPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>

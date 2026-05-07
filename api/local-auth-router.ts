@@ -5,26 +5,58 @@ import { localUsers } from "@db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+import * as cookie from "cookie";
+import { env } from "./lib/env";
+import { getSessionCookieOptions } from "./lib/cookies";
+import { LocalSession } from "@contracts/constants";
+import { enforceRateLimit, RateLimits } from "./lib/rate-limit";
+import { strongPassword } from "./lib/validation";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "wealthwise-local-auth-secret-key-2024"
-);
+const getJwtSecret = () => new TextEncoder().encode(env.jwtSecret);
 
 async function createToken(userId: number, email: string, role: string) {
   return new SignJWT({ userId, email, role, type: "local" })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifyLocalToken(token: string) {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+    const { payload } = await jwtVerify(token, getJwtSecret(), { clockTolerance: 60 });
     return payload as { userId: number; email: string; role: string; type: string };
   } catch {
     return null;
   }
+}
+
+function setLocalAuthCookie(resHeaders: Headers, reqHeaders: Headers, token: string) {
+  const opts = getSessionCookieOptions(reqHeaders);
+  resHeaders.append(
+    "set-cookie",
+    cookie.serialize(LocalSession.cookieName, token, {
+      httpOnly: opts.httpOnly,
+      path: opts.path,
+      sameSite: opts.sameSite?.toLowerCase() as "lax" | "none",
+      secure: opts.secure,
+      maxAge: LocalSession.maxAgeMs / 1000,
+    }),
+  );
+}
+
+function clearLocalAuthCookie(resHeaders: Headers, reqHeaders: Headers) {
+  const opts = getSessionCookieOptions(reqHeaders);
+  resHeaders.append(
+    "set-cookie",
+    cookie.serialize(LocalSession.cookieName, "", {
+      httpOnly: opts.httpOnly,
+      path: opts.path,
+      sameSite: opts.sameSite?.toLowerCase() as "lax" | "none",
+      secure: opts.secure,
+      maxAge: 0,
+    }),
+  );
 }
 
 export const localAuthRouter = createRouter({
@@ -32,11 +64,13 @@ export const localAuthRouter = createRouter({
     .input(
       z.object({
         email: z.string().email().max(320),
-        password: z.string().min(6).max(100),
+        password: strongPassword,
         name: z.string().min(1).max(255).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit(ctx, "auth", RateLimits.auth);
+
       const db = getDb();
       const existing = await db.query.localUsers.findFirst({
         where: eq(localUsers.email, input.email),
@@ -52,7 +86,8 @@ export const localAuthRouter = createRouter({
       });
       const userId = Number((result as any).insertId);
       const token = await createToken(userId, input.email, "user");
-      return { success: true, token, user: { id: userId, email: input.email, name: input.name || input.email.split("@")[0] } };
+      setLocalAuthCookie(ctx.resHeaders, ctx.req.headers, token);
+      return { success: true, user: { id: userId, email: input.email, name: input.name || input.email.split("@")[0] } };
     }),
 
   login: publicQuery
@@ -62,7 +97,9 @@ export const localAuthRouter = createRouter({
         password: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit(ctx, "auth", RateLimits.auth);
+
       const db = getDb();
       const user = await db.query.localUsers.findFirst({
         where: eq(localUsers.email, input.email),
@@ -76,17 +113,18 @@ export const localAuthRouter = createRouter({
       }
       await db.update(localUsers).set({ lastSignInAt: new Date() }).where(eq(localUsers.id, user.id));
       const token = await createToken(user.id, user.email, user.role);
+      setLocalAuthCookie(ctx.resHeaders, ctx.req.headers, token);
       return {
         success: true,
-        token,
         user: { id: user.id, email: user.email, name: user.name },
       };
     }),
 
   me: publicQuery.query(async ({ ctx }) => {
-    const authHeader = ctx.req.headers.get("x-local-auth-token");
-    if (!authHeader) return null;
-    const payload = await verifyLocalToken(authHeader);
+    const cookies = cookie.parse(ctx.req.headers.get("cookie") || "");
+    const token = cookies[LocalSession.cookieName];
+    if (!token) return null;
+    const payload = await verifyLocalToken(token);
     if (!payload) return null;
     const db = getDb();
     const user = await db.query.localUsers.findFirst({
@@ -102,5 +140,10 @@ export const localAuthRouter = createRouter({
       createdAt: user.createdAt,
       lastSignInAt: user.lastSignInAt,
     };
+  }),
+
+  logout: publicQuery.mutation(async ({ ctx }) => {
+    clearLocalAuthCookie(ctx.resHeaders, ctx.req.headers);
+    return { success: true };
   }),
 });

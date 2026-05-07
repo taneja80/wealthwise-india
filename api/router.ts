@@ -8,6 +8,11 @@ import { chatRouter } from "./chat-router";
 import { taxRouter } from "./tax-router";
 import { retirementRouter } from "./retirement-router";
 import { assetRouter } from "./asset-router";
+import { accountRouter } from "./account-router";
+import { exportRouter } from "./export-router";
+import { importRouter } from "./import-router";
+import { currencyRouter } from "./currency-router";
+import { mfRouter } from "./mf-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -22,6 +27,11 @@ export const appRouter = createRouter({
   tax: taxRouter,
   retirement: retirementRouter,
   asset: assetRouter,
+  account: accountRouter,
+  export: exportRouter,
+  import: importRouter,
+  currency: currencyRouter,
+  mf: mfRouter,
 });
 
 export type AppRouter = typeof appRouter;

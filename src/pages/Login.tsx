@@ -13,7 +13,11 @@ function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
   const appID = import.meta.env.VITE_APP_ID;
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
+  const state = crypto.randomUUID();
+
+  // Store state and redirect URI in a cookie for server-side CSRF validation
+  document.cookie = `oauth_state=${state}; path=/; max-age=600; SameSite=Lax`;
+  document.cookie = `oauth_redirect_uri=${encodeURIComponent(redirectUri)}; path=/; max-age=600; SameSite=Lax`;
 
   const url = new URL(`${kimiAuthUrl}/api/oauth/authorize`);
   url.searchParams.set("client_id", appID);
@@ -35,8 +39,7 @@ export default function Login() {
 
   const loginMutation = trpc.localAuth.login.useMutation({
     onSuccess: (data) => {
-      if (data.success && data.token) {
-        localStorage.setItem("local_auth_token", data.token);
+      if (data.success) {
         window.location.href = "/dashboard";
       } else {
         setError(data.error ?? "Login failed");
@@ -47,8 +50,7 @@ export default function Login() {
 
   const registerMutation = trpc.localAuth.register.useMutation({
     onSuccess: (data) => {
-      if (data.success && data.token) {
-        localStorage.setItem("local_auth_token", data.token);
+      if (data.success) {
         window.location.href = "/dashboard";
       } else {
         setError(data.error ?? "Registration failed");
@@ -63,8 +65,12 @@ export default function Login() {
     if (mode === "login") {
       loginMutation.mutate({ email, password });
     } else {
-      if (password.length < 6) {
-        setError("Password must be at least 6 characters");
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters");
+        return;
+      }
+      if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+        setError("Password must include uppercase, lowercase, a digit, and a special character");
         return;
       }
       registerMutation.mutate({ email, password, name: name || undefined });
@@ -72,6 +78,7 @@ export default function Login() {
   };
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
+  const kimiEnabled = Boolean(import.meta.env.VITE_KIMI_AUTH_URL && import.meta.env.VITE_APP_ID);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f1a2e] via-[#1a2744] to-[#0f1a2e] relative overflow-hidden">
@@ -178,7 +185,7 @@ export default function Login() {
                       <Input
                         id="reg-password"
                         type={showPassword ? "text" : "password"}
-                        placeholder="Min 6 characters"
+                        placeholder="Min 8 chars, A-z, 0-9, special"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
@@ -200,25 +207,28 @@ export default function Login() {
               </TabsContent>
             </Tabs>
 
-            {/* Divider */}
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border/50" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-white px-3 text-muted-foreground">or continue with</span>
-              </div>
-            </div>
+            {/* Divider + OAuth — only shown when Kimi credentials are configured */}
+            {kimiEnabled && (
+              <>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border/50" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white px-3 text-muted-foreground">or continue with</span>
+                  </div>
+                </div>
 
-            {/* OAuth Button */}
-            <Button
-              variant="outline"
-              className="w-full h-11 border-[#1a2744]/20 hover:bg-[#1a2744]/5"
-              onClick={() => { window.location.href = getOAuthUrl(); }}
-            >
-              <Mail className="w-4 h-4 mr-2" />
-              Kimi OAuth Sign In
-            </Button>
+                <Button
+                  variant="outline"
+                  className="w-full h-11 border-[#1a2744]/20 hover:bg-[#1a2744]/5"
+                  onClick={() => { window.location.href = getOAuthUrl(); }}
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Kimi OAuth Sign In
+                </Button>
+              </>
+            )}
 
             <p className="text-xs text-muted-foreground text-center">
               By signing in, you agree to our Terms of Service and Privacy Policy.

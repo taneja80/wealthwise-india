@@ -3,6 +3,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { userProfiles, financialProfiles } from "@db/schema";
 import { eq } from "drizzle-orm";
+import { safeDecimal } from "./lib/validation";
 
 export const profileRouter = createRouter({
   getUserProfile: authedQuery.query(async ({ ctx }) => {
@@ -25,21 +26,23 @@ export const profileRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      const existing = await db.query.userProfiles.findFirst({
-        where: eq(userProfiles.userId, ctx.user.id),
+      return db.transaction(async (tx) => {
+        const existing = await tx.query.userProfiles.findFirst({
+          where: eq(userProfiles.userId, ctx.user.id),
+        });
+        if (existing) {
+          await tx
+            .update(userProfiles)
+            .set({ ...input, updatedAt: new Date() })
+            .where(eq(userProfiles.userId, ctx.user.id));
+          return { success: true, updated: true };
+        }
+        await tx.insert(userProfiles).values({
+          ...input,
+          userId: ctx.user.id,
+        });
+        return { success: true, updated: false };
       });
-      if (existing) {
-        await db
-          .update(userProfiles)
-          .set({ ...input, updatedAt: new Date() })
-          .where(eq(userProfiles.userId, ctx.user.id));
-        return { success: true, updated: true };
-      }
-      await db.insert(userProfiles).values({
-        ...input,
-        userId: ctx.user.id,
-      });
-      return { success: true, updated: false };
     }),
 
   getFinancialProfile: authedQuery.query(async ({ ctx }) => {
@@ -53,25 +56,22 @@ export const profileRouter = createRouter({
   createFinancialProfile: authedQuery
     .input(
       z.object({
-        monthlyIncome: z.number().min(0),
-        monthlyExpenses: z.number().min(0),
-        emergencyFund: z.number().min(0).default(0),
-        totalAssets: z.number().min(0).default(0),
-        totalLiabilities: z.number().min(0).default(0),
-        equityInvestments: z.number().min(0).default(0),
-        debtInvestments: z.number().min(0).default(0),
-        realEstate: z.number().min(0).default(0),
-        gold: z.number().min(0).default(0),
-        otherAssets: z.number().min(0).default(0),
+        monthlyIncome: safeDecimal({ min: 0 }),
+        monthlyExpenses: safeDecimal({ min: 0 }),
+        emergencyFund: safeDecimal({ min: 0 }).default(0),
+        totalAssets: safeDecimal({ min: 0 }).default(0),
+        totalLiabilities: safeDecimal({ min: 0 }).default(0),
+        equityInvestments: safeDecimal({ min: 0 }).default(0),
+        debtInvestments: safeDecimal({ min: 0 }).default(0),
+        realEstate: safeDecimal({ min: 0 }).default(0),
+        gold: safeDecimal({ min: 0 }).default(0),
+        otherAssets: safeDecimal({ min: 0 }).default(0),
         inflationScenario: z.enum(["low", "moderate", "high"]).default("moderate"),
-        planningHorizon: z.number().min(1).max(50).default(30),
+        planningHorizon: z.number().int().min(1).max(50).default(30),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      const existing = await db.query.financialProfiles.findFirst({
-        where: eq(financialProfiles.userId, ctx.user.id),
-      });
       const data = {
         monthlyIncome: String(input.monthlyIncome),
         monthlyExpenses: String(input.monthlyExpenses),
@@ -86,17 +86,22 @@ export const profileRouter = createRouter({
         inflationScenario: input.inflationScenario,
         planningHorizon: input.planningHorizon,
       };
-      if (existing) {
-        await db
-          .update(financialProfiles)
-          .set({ ...data, updatedAt: new Date() })
-          .where(eq(financialProfiles.userId, ctx.user.id));
-        return { success: true, updated: true };
-      }
-      await db.insert(financialProfiles).values({
-        ...data,
-        userId: ctx.user.id,
+      return db.transaction(async (tx) => {
+        const existing = await tx.query.financialProfiles.findFirst({
+          where: eq(financialProfiles.userId, ctx.user.id),
+        });
+        if (existing) {
+          await tx
+            .update(financialProfiles)
+            .set({ ...data, updatedAt: new Date() })
+            .where(eq(financialProfiles.userId, ctx.user.id));
+          return { success: true, updated: true };
+        }
+        await tx.insert(financialProfiles).values({
+          ...data,
+          userId: ctx.user.id,
+        });
+        return { success: true, updated: false };
       });
-      return { success: true, updated: false };
     }),
 });

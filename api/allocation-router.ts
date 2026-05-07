@@ -112,37 +112,50 @@ export const allocationRouter = createRouter({
       where: eq(goals.userId, ctx.user.id),
     });
 
-    await db
-      .delete(investmentAllocations)
-      .where(eq(investmentAllocations.userId, ctx.user.id));
+    const allAllocations: Array<{
+      id: number;
+      goalId: number;
+      goalName: string;
+      assetClass: string;
+      allocationPercent: number;
+      recommendedAmount: number;
+      expectedReturn: number;
+      riskLevel: string;
+    }> = [];
 
-    const allAllocations = [];
-    for (const goal of goalList) {
-      const allocations = getAllocationForGoal(
-        goal.category,
-        goal.timelineYears,
-        goal.priority ?? "medium",
-        Number(goal.monthlyContribution),
-      );
+    // Use a transaction so delete + inserts are atomic
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(investmentAllocations)
+        .where(eq(investmentAllocations.userId, ctx.user.id));
 
-      for (const alloc of allocations) {
-        const result = await db.insert(investmentAllocations).values({
-          userId: ctx.user.id,
-          goalId: goal.id,
-          assetClass: alloc.assetClass as any,
-          allocationPercent: String(alloc.allocationPercent),
-          recommendedAmount: String(alloc.recommendedAmount),
-          expectedReturn: String(alloc.expectedReturn),
-          riskLevel: alloc.riskLevel as any,
-        });
-        allAllocations.push({
-          id: Number((result as any).insertId),
-          goalId: goal.id,
-          goalName: goal.name,
-          ...alloc,
-        });
+      for (const goal of goalList) {
+        const allocations = getAllocationForGoal(
+          goal.category,
+          goal.timelineYears,
+          goal.priority ?? "medium",
+          Number(goal.monthlyContribution),
+        );
+
+        for (const alloc of allocations) {
+          const result = await tx.insert(investmentAllocations).values({
+            userId: ctx.user.id,
+            goalId: goal.id,
+            assetClass: alloc.assetClass as any,
+            allocationPercent: String(alloc.allocationPercent),
+            recommendedAmount: String(alloc.recommendedAmount),
+            expectedReturn: String(alloc.expectedReturn),
+            riskLevel: alloc.riskLevel as any,
+          });
+          allAllocations.push({
+            id: Number((result as any).insertId),
+            goalId: goal.id,
+            goalName: goal.name,
+            ...alloc,
+          });
+        }
       }
-    }
+    });
 
     return allAllocations;
   }),

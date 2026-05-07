@@ -3,6 +3,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { retirementModels, userProfiles, financialProfiles } from "@db/schema";
 import { eq } from "drizzle-orm";
+import { safeDecimal } from "./lib/validation";
 
 export const retirementRouter = createRouter({
   getModel: authedQuery.query(async ({ ctx }) => {
@@ -15,15 +16,15 @@ export const retirementRouter = createRouter({
   saveModel: authedQuery
     .input(
       z.object({
-        retirementAge: z.number().min(40).max(75).default(60),
-        currentMonthlyExpense: z.number().min(0),
-        postRetirementExpensePercent: z.number().min(30).max(120).default(70),
-        healthcareInflation: z.number().min(5).max(20).default(10),
-        lifestyleInflation: z.number().min(3).max(15).default(6),
-        lifeExpectancy: z.number().min(60).max(100).default(85),
-        desiredCorpus: z.number().min(0).default(0),
-        monthlyPension: z.number().min(0).default(0),
-        rentalIncomePostRetirement: z.number().min(0).default(0),
+        retirementAge: z.number().int().min(40).max(75).default(60),
+        currentMonthlyExpense: safeDecimal({ min: 0 }),
+        postRetirementExpensePercent: z.number().int().min(30).max(120).default(70),
+        healthcareInflation: safeDecimal({ min: 5, max: 20 }).default(10),
+        lifestyleInflation: safeDecimal({ min: 3, max: 15 }).default(6),
+        lifeExpectancy: z.number().int().min(60).max(100).default(85),
+        desiredCorpus: safeDecimal({ min: 0 }).default(0),
+        monthlyPension: safeDecimal({ min: 0 }).default(0),
+        rentalIncomePostRetirement: safeDecimal({ min: 0 }).default(0),
       }),
     )
     .mutation(async ({ ctx, input }) => {

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { assetHoldings, financialProfiles, userProfiles } from "@db/schema";
+import { assetHoldings, assetProjections, financialProfiles, userProfiles } from "@db/schema";
 import { eq } from "drizzle-orm";
+import { safeDecimal } from "./lib/validation";
 
 // Asset class parameters for CAPM/Mean-Variance Optimization
 // Returns are post-tax, inflation-adjusted real returns
@@ -180,10 +181,10 @@ export const assetRouter = createRouter({
       z.object({
         assetClass: z.enum(["equity", "debt", "gold", "real_estate", "liquid", "international"]),
         instrument: z.string().min(1).max(255),
-        currentValue: z.number().min(0),
-        monthlySip: z.number().min(0).default(0),
-        expectedReturn: z.number().min(0).max(100),
-        riskScore: z.number().min(1).max(10).default(5),
+        currentValue: safeDecimal({ min: 0 }),
+        monthlySip: safeDecimal({ min: 0 }).default(0),
+        expectedReturn: safeDecimal({ min: 0, max: 100 }),
+        riskScore: safeDecimal({ min: 1, max: 10 }).default(5),
         taxTreatment: z.enum([
           "equity_ltcg", "debt_interest", "debt_ltcg", "gold_ltcg",
           "real_estate_ltcg", "tax_free", "epf_tax_deferred",
@@ -350,6 +351,21 @@ export const assetRouter = createRouter({
     const optimalWeights = meanVarianceOptimization(allAssetClasses, riskTolerance);
     const portfolioReturn = calculatePortfolioReturn(optimalWeights, allAssetClasses);
     const portfolioVol = calculatePortfolioVolatility(optimalWeights, allAssetClasses);
+
+    // Persist projections into the assetProjections table
+    await db.transaction(async (tx) => {
+      await tx.delete(assetProjections).where(eq(assetProjections.userId, ctx.user.id));
+      for (const p of projections) {
+        await tx.insert(assetProjections).values({
+          userId: ctx.user.id,
+          year: p.year,
+          assetClass: p.assetClass as any,
+          projectedValue: String(p.projectedValue),
+          contributions: String(p.contributions),
+          returns: String(p.returns),
+        });
+      }
+    });
 
     // Current allocation
     const totalValue = Object.values(byAssetClass).reduce((s, d) => s + d.currentValue, 0);

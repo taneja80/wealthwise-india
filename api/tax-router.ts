@@ -3,6 +3,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { taxProfiles } from "@db/schema";
 import { eq } from "drizzle-orm";
+import { safeDecimal } from "./lib/validation";
 
 // Indian tax slabs FY 2024-25 (Old Regime)
 const OLD_REGIME_SLABS = [
@@ -79,14 +80,14 @@ export const taxRouter = createRouter({
     .input(
       z.object({
         regime: z.enum(["old", "new"]).default("old"),
-        section80c: z.number().min(0).default(0),
-        section80dSelf: z.number().min(0).default(0),
-        section80dParents: z.number().min(0).default(0),
-        section80ccd1b: z.number().min(0).default(0),
-        section24b: z.number().min(0).default(0),
-        section80e: z.number().min(0).default(0),
-        section80g: z.number().min(0).default(0),
-        hraExemption: z.number().min(0).default(0),
+        section80c: safeDecimal({ min: 0 }).default(0),
+        section80dSelf: safeDecimal({ min: 0 }).default(0),
+        section80dParents: safeDecimal({ min: 0 }).default(0),
+        section80ccd1b: safeDecimal({ min: 0 }).default(0),
+        section24b: safeDecimal({ min: 0 }).default(0),
+        section80e: safeDecimal({ min: 0 }).default(0),
+        section80g: safeDecimal({ min: 0 }).default(0),
+        hraExemption: safeDecimal({ min: 0 }).default(0),
         ltaClaimed: z.boolean().default(false),
         hasNps: z.boolean().default(false),
         hasPpf: z.boolean().default(false),

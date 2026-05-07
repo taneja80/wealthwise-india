@@ -12,7 +12,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: history, isLoading: historyLoading } = trpc.chat.getHistory.useQuery(undefined, {
+  const { data: historyData, isLoading: historyLoading } = trpc.chat.getHistory.useQuery({}, {
     enabled: !!user,
   });
 
@@ -32,9 +32,9 @@ export default function ChatPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [history]);
+  }, [historyData]);
 
-  const allMessages = history ?? [];
+  const allMessages = historyData?.messages ?? [];
 
   const suggestedQuestions = [
     "How much should I save for retirement?",

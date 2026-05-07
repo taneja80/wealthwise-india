@@ -8,8 +8,21 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
+import { useState } from "react";
 import {
   Target,
   TrendingUp,
@@ -24,14 +37,41 @@ import {
   Calculator,
   Landmark,
   Shield,
+  Download,
+  Trash2,
 } from "lucide-react";
 import { formatCurrency, formatCompact, formatPercent } from "@/lib/format";
 
 export default function Dashboard() {
-  const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
+  const { user, isLoading: authLoading, logout } = useAuth({ redirectOnUnauthenticated: true });
   const { data: userProfile } = trpc.profile.getUserProfile.useQuery(undefined, { enabled: !!user });
   const { data: financialProfile } = trpc.profile.getFinancialProfile.useQuery(undefined, { enabled: !!user });
   const { data: goals } = trpc.goals.list.useQuery(undefined, { enabled: !!user });
+
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+
+  const exportMutation = trpc.export.allData.useQuery(undefined, {
+    enabled: false, // only fetch on demand
+  });
+
+  const deleteAccountMutation = trpc.account.deleteAccount.useMutation({
+    onSuccess: () => {
+      window.location.href = "/";
+    },
+  });
+
+  const handleExport = async () => {
+    const result = await exportMutation.refetch();
+    if (result.data) {
+      const blob = new Blob([result.data.csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.data.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -275,6 +315,62 @@ export default function Dashboard() {
             </Card>
           </motion.div>
         )}
+
+        {/* Account Management */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Account Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleExport}
+                  disabled={exportMutation.isFetching}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  {exportMutation.isFetching ? "Exporting..." : "Export All Data (CSV)"}
+                </Button>
+
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Account
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete your account and all associated data including
+                        goals, projections, investments, and chat history. This action cannot be undone.
+                        <br /><br />
+                        Type <strong>DELETE</strong> below to confirm.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Input
+                      placeholder="Type DELETE to confirm"
+                      value={deleteConfirm}
+                      onChange={(e) => setDeleteConfirm(e.target.value)}
+                    />
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setDeleteConfirm("")}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={deleteConfirm !== "DELETE" || deleteAccountMutation.isPending}
+                        onClick={() => deleteAccountMutation.mutate({ confirmation: "DELETE" })}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        {deleteAccountMutation.isPending ? "Deleting..." : "Delete Permanently"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </TooltipProvider>
   );

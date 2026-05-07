@@ -3,6 +3,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { goals } from "@db/schema";
 import { eq, and } from "drizzle-orm";
+import { safeDecimal } from "./lib/validation";
 
 export const goalsRouter = createRouter({
   list: authedQuery.query(async ({ ctx }) => {
@@ -28,13 +29,13 @@ export const goalsRouter = createRouter({
           "wealth",
           "other",
         ]),
-        targetAmount: z.number().min(0),
-        currentAmount: z.number().min(0).default(0),
-        timelineYears: z.number().min(1).max(50),
+        targetAmount: safeDecimal({ min: 0 }),
+        currentAmount: safeDecimal({ min: 0 }).default(0),
+        timelineYears: z.number().int().min(1).max(50),
         priority: z.enum(["high", "medium", "low"]).default("medium"),
         description: z.string().optional(),
-        monthlyContribution: z.number().min(0).default(0),
-        expectedReturn: z.number().min(0).max(100).default(8),
+        monthlyContribution: safeDecimal({ min: 0 }).default(0),
+        expectedReturn: safeDecimal({ min: 0, max: 100 }).default(8),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -70,13 +71,13 @@ export const goalsRouter = createRouter({
           "wealth",
           "other",
         ]).optional(),
-        targetAmount: z.number().min(0).optional(),
-        currentAmount: z.number().min(0).optional(),
-        timelineYears: z.number().min(1).max(50).optional(),
+        targetAmount: safeDecimal({ min: 0 }).optional(),
+        currentAmount: safeDecimal({ min: 0 }).optional(),
+        timelineYears: z.number().int().min(1).max(50).optional(),
         priority: z.enum(["high", "medium", "low"]).optional(),
         description: z.string().optional(),
-        monthlyContribution: z.number().min(0).optional(),
-        expectedReturn: z.number().min(0).max(100).optional(),
+        monthlyContribution: safeDecimal({ min: 0 }).optional(),
+        expectedReturn: safeDecimal({ min: 0, max: 100 }).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

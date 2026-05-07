@@ -111,21 +111,33 @@ export const cashFlowRouter = createRouter({
       formattedGoals,
     );
 
-    await db.delete(cashFlowProjections).where(eq(cashFlowProjections.userId, ctx.user.id));
+    await db.transaction(async (tx) => {
+      await tx.delete(cashFlowProjections).where(eq(cashFlowProjections.userId, ctx.user.id));
 
-    for (const proj of projections) {
-      await db.insert(cashFlowProjections).values({
-        userId: ctx.user.id,
-        year: proj.year,
-        age: proj.age,
-        income: String(proj.income),
-        expenses: String(proj.expenses),
-        savings: String(proj.savings),
-        investments: String(proj.investments),
-        netWorth: String(proj.netWorth),
-        goalContributions: proj.goalContributions,
-      });
-    }
+      for (const proj of projections) {
+        // Sanitize goalContributions: ensure all keys are strings, all values are finite numbers
+        const safeGoalContributions: Record<string, number> = {};
+        for (const [key, val] of Object.entries(proj.goalContributions)) {
+          const sanitizedKey = String(key).slice(0, 255);
+          const numVal = Number(val);
+          if (Number.isFinite(numVal)) {
+            safeGoalContributions[sanitizedKey] = Math.round(numVal);
+          }
+        }
+
+        await tx.insert(cashFlowProjections).values({
+          userId: ctx.user.id,
+          year: proj.year,
+          age: proj.age,
+          income: String(proj.income),
+          expenses: String(proj.expenses),
+          savings: String(proj.savings),
+          investments: String(proj.investments),
+          netWorth: String(proj.netWorth),
+          goalContributions: safeGoalContributions,
+        });
+      }
+    });
 
     return projections;
   }),

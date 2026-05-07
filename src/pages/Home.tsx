@@ -95,7 +95,7 @@ export default function Home() {
             >
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#d4a843]/10 border border-[#d4a843]/20 text-[#d4a843] text-sm font-medium mb-6">
                 <Star className="w-4 h-4" />
-                India's Most Trusted Financial Planner
+                Abhi's Personal Financial Planner
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
                 Plan Your Wealth,
@@ -120,26 +120,11 @@ export default function Home() {
                   <Button
                     variant="outline"
                     size="lg"
-                    className="border-white/30 text-white hover:bg-white/10 px-8"
+                    className="border-[#d4a843]/60 text-[#d4a843] hover:bg-[#d4a843]/10 hover:border-[#d4a843] px-8 font-semibold"
                   >
                     Explore Features
                   </Button>
                 </a>
-              </div>
-              <div className="flex items-center gap-3 mt-8">
-                <div className="flex -space-x-2">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div
-                      key={i}
-                      className="w-8 h-8 rounded-full bg-gradient-to-br from-[#d4a843] to-[#b8923d] border-2 border-[#0f1a2e] flex items-center justify-center text-xs text-white font-bold"
-                    >
-                      {String.fromCharCode(64 + i)}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-sm text-slate-400">
-                  Share your plan with family & friends
-                </p>
               </div>
             </motion.div>
             <motion.div

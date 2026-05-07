@@ -37,14 +37,21 @@ async function exchangeAuthCode(
   return resp.json() as Promise<TokenResponse>;
 }
 
-const jwks = jose.createRemoteJWKSet(
-  new URL(`${env.kimiAuthUrl}/api/.well-known/jwks.json`),
-);
+let _jwks: ReturnType<typeof jose.createRemoteJWKSet> | null = null;
+function getJwks() {
+  if (!_jwks) {
+    if (!env.kimiAuthUrl) throw new Error("KIMI_AUTH_URL is not configured");
+    _jwks = jose.createRemoteJWKSet(
+      new URL(`${env.kimiAuthUrl}/api/.well-known/jwks.json`),
+    );
+  }
+  return _jwks;
+}
 
 async function verifyAccessToken(
   accessToken: string,
 ): Promise<{ userId: string; clientId: string }> {
-  const { payload } = await jose.jwtVerify(accessToken, jwks);
+  const { payload } = await jose.jwtVerify(accessToken, getJwks());
   const userId = payload.user_id as string;
   const clientId = payload.client_id as string;
   if (!userId) {
@@ -93,7 +100,19 @@ export function createOAuthCallbackHandler() {
     }
 
     try {
-      const redirectUri = atob(state);
+      // Validate CSRF state against cookie
+      const cookies = cookie.parse(c.req.raw.headers.get("cookie") || "");
+      const expectedState = cookies["oauth_state"];
+      if (!expectedState || expectedState !== state) {
+        return c.json({ error: "Invalid OAuth state — possible CSRF attack" }, 403);
+      }
+
+      // Reconstruct redirect URI from cookie (set by client before redirect)
+      const encodedRedirectUri = cookies["oauth_redirect_uri"];
+      const redirectUri = encodedRedirectUri
+        ? decodeURIComponent(encodedRedirectUri)
+        : `${new URL(c.req.url).origin}/api/oauth/callback`;
+
       const tokenResp = await exchangeAuthCode(code, redirectUri);
       const { userId } = await verifyAccessToken(tokenResp.access_token);
       const userProfile = await kimiUsers.getProfile(tokenResp.access_token);
@@ -118,6 +137,10 @@ export function createOAuthCallbackHandler() {
         ...cookieOpts,
         maxAge: Session.maxAgeMs / 1000,
       });
+
+      // Clear the one-time OAuth state cookies
+      setCookie(c, "oauth_state", "", { path: "/", maxAge: 0 });
+      setCookie(c, "oauth_redirect_uri", "", { path: "/", maxAge: 0 });
 
       return c.redirect("/", 302);
     } catch (error) {

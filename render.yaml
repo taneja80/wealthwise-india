@@ -15,15 +15,21 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
+      - key: APP_SECRET
+        generateValue: true
+      # Optional: Kimi OAuth (leave empty to disable)
       - key: VITE_APP_ID
         sync: false
       - key: VITE_KIMI_AUTH_URL
         sync: false
-      - key: MOONSHOT_API_KEY
-        sync: false
       - key: APP_ID
         sync: false
-      - key: APP_SECRET
+      - key: KIMI_AUTH_URL
+        sync: false
+      - key: KIMI_OPEN_URL
+        sync: false
+      # Optional: AI Chat (Moonshot API)
+      - key: MOONSHOT_API_KEY
         sync: false
     healthCheckPath: /api/ping
 

@@ -36,11 +36,8 @@ export function useAuth(options?: UseAuthOptions) {
     enabled: !oauthUser, // only check local if no OAuth user
   });
 
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: async () => {
-      await utils.invalidate();
-    },
-  });
+  const oauthLogoutMutation = trpc.auth.logout.useMutation();
+  const localLogoutMutation = trpc.localAuth.logout.useMutation();
 
   // Normalize user: prefer OAuth, fallback to local
   const user = oauthUser ?? localUser ?? null;
@@ -48,14 +45,14 @@ export function useAuth(options?: UseAuthOptions) {
   const error = oauthError ?? localError;
 
   const logout = useCallback(() => {
-    // Always clear everything
-    localStorage.removeItem("local_auth_token");
-    logoutMutation.mutate(undefined, {
-      onSettled: () => {
-        window.location.href = redirectPath;
-      },
+    // Clear both OAuth and local auth cookies via server calls
+    Promise.allSettled([
+      oauthLogoutMutation.mutateAsync(undefined).catch(() => {}),
+      localLogoutMutation.mutateAsync(undefined).catch(() => {}),
+    ]).then(() => {
+      window.location.href = redirectPath;
     });
-  }, [logoutMutation, redirectPath]);
+  }, [oauthLogoutMutation, localLogoutMutation, redirectPath]);
 
   useEffect(() => {
     if (redirectOnUnauthenticated && !isLoading && !user) {
@@ -70,7 +67,7 @@ export function useAuth(options?: UseAuthOptions) {
     () => ({
       user,
       isAuthenticated: !!user,
-      isLoading: isLoading || logoutMutation.isPending,
+      isLoading: isLoading || oauthLogoutMutation.isPending || localLogoutMutation.isPending,
       error,
       logout,
       refresh: () => {
@@ -78,6 +75,6 @@ export function useAuth(options?: UseAuthOptions) {
         utils.localAuth.me.invalidate();
       },
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, utils],
+    [user, isLoading, oauthLogoutMutation.isPending, localLogoutMutation.isPending, error, logout, utils],
   );
 }
