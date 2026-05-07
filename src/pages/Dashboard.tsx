@@ -73,6 +73,14 @@ export default function Dashboard() {
     }
   };
 
+  const { data: goalTracking } = trpc.goals.trackProgress.useQuery(
+    { includeIlliquid: false },
+    { enabled: !!user && (goals?.length ?? 0) > 0 },
+  );
+  const { data: portfolioHealth } = trpc.asset.portfolioHealth.useQuery(undefined, {
+    enabled: !!user,
+  });
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -88,6 +96,58 @@ export default function Dashboard() {
   const netWorth = Number(financialProfile?.totalAssets ?? 0) - Number(financialProfile?.totalLiabilities ?? 0);
   const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0;
   const hasProfile = !!userProfile && !!financialProfile;
+
+  // Financial health score (0-100)
+  const healthScore = (() => {
+    if (!hasProfile) return null;
+    let score = 0;
+    score += Math.min(savingsRate, 50) * 0.5;
+    const efStatus = goalTracking?.summary?.emergencyFund?.status;
+    if (efStatus === "adequate") score += 20;
+    else if (efStatus === "low") score += 10;
+    const gs = goalTracking?.summary?.overallStatus;
+    if (gs === "ahead") score += 25;
+    else if (gs === "on_track") score += 20;
+    else if (gs === "behind") score += 10;
+    if (portfolioHealth && !portfolioHealth.needsRebalancing) score += 15;
+    else if (portfolioHealth) score += 7;
+    if (hasProfile) score += 10;
+    if (totalGoals > 0) score += 5;
+    return Math.min(Math.round(score), 100);
+  })();
+
+  const healthColor =
+    healthScore === null ? "text-muted-foreground" :
+    healthScore >= 75 ? "text-emerald-600" :
+    healthScore >= 50 ? "text-amber-600" : "text-red-600";
+
+  const healthLabel =
+    healthScore === null ? "Set up profile" :
+    healthScore >= 75 ? "Excellent" :
+    healthScore >= 50 ? "Needs Attention" : "Action Required";
+
+  const insights: Array<{ text: string; type: "warning" | "success" | "info" }> = [];
+  if (hasProfile) {
+    if (savingsRate < 20) {
+      insights.push({ text: `Savings rate is ${formatPercent(savingsRate)} — aim for at least 20% for financial security`, type: "warning" });
+    } else if (savingsRate >= 30) {
+      insights.push({ text: `Great savings rate of ${formatPercent(savingsRate)} — you're building wealth efficiently`, type: "success" });
+    }
+    if (goalTracking?.summary?.emergencyFund?.status === "none") {
+      insights.push({ text: `No emergency fund detected — build at least ${formatCompact(goalTracking.summary.emergencyFund.recommended)} (6 months expenses)`, type: "warning" });
+    } else if (goalTracking?.summary?.emergencyFund?.status === "low") {
+      insights.push({ text: `Emergency fund is low (${formatCompact(goalTracking.summary.emergencyFund.current)}) — target ${formatCompact(goalTracking.summary.emergencyFund.recommended)}`, type: "warning" });
+    }
+    if (goalTracking?.summary?.sipGap && goalTracking.summary.sipGap > 0) {
+      insights.push({ text: `Increase SIP by ${formatCurrency(goalTracking.summary.sipGap)}/mo to stay on track for all goals`, type: "info" });
+    }
+    if (portfolioHealth?.needsRebalancing) {
+      insights.push({ text: `Portfolio has drifted ${portfolioHealth.totalDriftPct}% from optimal allocation — consider rebalancing`, type: "warning" });
+    }
+    if (portfolioHealth?.concentrationAlerts && portfolioHealth.concentrationAlerts.length > 0) {
+      insights.push({ text: `${portfolioHealth.concentrationAlerts[0].instrument} is ${portfolioHealth.concentrationAlerts[0].portfolioPct}% of portfolio — diversify to reduce risk`, type: "warning" });
+    }
+  }
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -160,6 +220,49 @@ export default function Dashboard() {
             );
           })}
         </div>
+
+        {/* Financial Health Score & Insights */}
+        {hasProfile && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <div className="grid sm:grid-cols-3 gap-4">
+              {/* Health Score */}
+              <Card className="sm:col-span-1">
+                <CardContent className="p-5 flex flex-col items-center justify-center text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Financial Health</p>
+                  <p className={`text-4xl font-bold ${healthColor}`}>{healthScore ?? "—"}</p>
+                  <p className={`text-sm font-medium mt-1 ${healthColor}`}>{healthLabel}</p>
+                  <p className="text-xs text-muted-foreground mt-2">Score out of 100</p>
+                </CardContent>
+              </Card>
+              {/* Insights */}
+              <Card className="sm:col-span-2">
+                <CardContent className="p-5">
+                  <p className="text-sm font-medium text-[#0f1a2e] mb-3">Key Insights</p>
+                  {insights.length > 0 ? (
+                    <div className="space-y-2">
+                      {insights.slice(0, 4).map((insight, i) => (
+                        <div key={i} className={`flex items-start gap-2 text-sm p-2 rounded-lg ${
+                          insight.type === "warning" ? "bg-amber-50 text-amber-700" :
+                          insight.type === "success" ? "bg-emerald-50 text-emerald-700" :
+                          "bg-blue-50 text-blue-700"
+                        }`}>
+                          {insight.type === "warning" && <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+                          {insight.type === "success" && <TrendingUp className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+                          {insight.type === "info" && <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+                          <span>{insight.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Add goals and assets to get personalized financial insights.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </motion.div>
+        )}
 
         {/* Quick Actions */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

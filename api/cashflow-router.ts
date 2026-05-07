@@ -1,6 +1,6 @@
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
-import { cashFlowProjections, goals, financialProfiles, userProfiles } from "@db/schema";
+import { cashFlowProjections, goals, financialProfiles, userProfiles, retirementModels } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 function calculateCashFlows(
@@ -12,6 +12,7 @@ function calculateCashFlows(
   planningHorizon: number,
   inflationScenario: string,
   goalList: Array<{ targetAmount: number; currentAmount: number; timelineYears: number; monthlyContribution: number; expectedReturn: number; name: string }>,
+  retirementAge: number = 60,
 ) {
   const inflationRates: Record<string, number> = {
     low: 0.04,
@@ -30,7 +31,7 @@ function calculateCashFlows(
     let yearlyIncome = currentIncome * Math.pow(1 + incomeGrowth, year - 1);
     let yearlyExpenses = currentExpenses * Math.pow(1 + inflation, year - 1);
 
-    if (currentAge >= 60) {
+    if (currentAge >= retirementAge) {
       yearlyIncome *= 0.3;
       yearlyExpenses *= 0.7;
     }
@@ -78,12 +79,16 @@ export const cashFlowRouter = createRouter({
     const goalList = await db.query.goals.findMany({
       where: eq(goals.userId, ctx.user.id),
     });
+    const retirementModel = await db.query.retirementModels.findFirst({
+      where: eq(retirementModels.userId, ctx.user.id),
+    });
 
     if (!profile || !userProfile) {
       return null;
     }
 
     const age = userProfile.age ?? 30;
+    const retirementAge = retirementModel?.retirementAge ?? 60;
     const monthlyIncome = Number(profile.monthlyIncome);
     const monthlyExpenses = Number(profile.monthlyExpenses);
     const totalAssets = Number(profile.totalAssets);
@@ -109,6 +114,7 @@ export const cashFlowRouter = createRouter({
       planningHorizon,
       inflationScenario,
       formattedGoals,
+      retirementAge,
     );
 
     await db.transaction(async (tx) => {

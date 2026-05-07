@@ -144,11 +144,21 @@ export const retirementRouter = createRouter({
     const corpusNeeded = netAnnualNeed / 0.035; // 3.5% safe withdrawal rate
     const corpusGap = Math.max(corpusNeeded - Number(fProfile.totalAssets), 0);
 
-    // Monthly savings required to bridge the gap
+    // Monthly SIP needed to bridge corpus gap using proper FV-of-annuity formula
+    // FV = PMT * [((1+r)^n - 1) / r] * (1+r)  where r = monthly rate
     const yearsToGoal = yearsToRetirement;
-    const monthlySavingsNeeded = yearsToGoal > 0
-      ? (corpusGap * 0.10) / (Math.pow(1.10, yearsToGoal) - 1) * (1 / 12)
-      : 0;
+    let monthlySavingsNeeded = 0;
+    if (yearsToGoal > 0 && corpusGap > 0) {
+      // First, subtract future value of existing assets growing at portfolio return
+      const fvExistingAssets = Number(fProfile.totalAssets) * Math.pow(1 + portfolioReturn, yearsToGoal);
+      const adjustedGap = Math.max(corpusNeeded - fvExistingAssets, 0);
+      if (adjustedGap > 0) {
+        const monthlyRate = portfolioReturn / 12;
+        const n = yearsToGoal * 12;
+        const annuityFactor = ((Math.pow(1 + monthlyRate, n) - 1) / monthlyRate) * (1 + monthlyRate);
+        monthlySavingsNeeded = adjustedGap / annuityFactor;
+      }
+    }
 
     return {
       summary: {

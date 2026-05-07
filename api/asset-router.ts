@@ -399,4 +399,103 @@ export const assetRouter = createRouter({
       },
     };
   }),
+
+  /** Portfolio health check: drift from optimal allocation + rebalancing alerts */
+  portfolioHealth: authedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    const holdings = await db.query.assetHoldings.findMany({
+      where: eq(assetHoldings.userId, ctx.user.id),
+    });
+    const uProfile = await db.query.userProfiles.findFirst({
+      where: eq(userProfiles.userId, ctx.user.id),
+    });
+
+    if (holdings.length === 0) return null;
+
+    const age = uProfile?.age ?? 30;
+    const riskTolerance = age < 35 ? "high" : age < 50 ? "medium" : "low";
+    const assetClasses = [...new Set(holdings.map((h) => h.assetClass))];
+    const optimalWeights = meanVarianceOptimization(assetClasses, riskTolerance);
+
+    // Current weights
+    const totalValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
+    const currentByClass: Record<string, number> = {};
+    for (const h of holdings) {
+      currentByClass[h.assetClass] = (currentByClass[h.assetClass] ?? 0) + Number(h.currentValue);
+    }
+    const currentWeights: Record<string, number> = {};
+    for (const ac of assetClasses) {
+      currentWeights[ac] = totalValue > 0 ? (currentByClass[ac] ?? 0) / totalValue : 0;
+    }
+
+    // Drift = |current - optimal|
+    const DRIFT_THRESHOLD = 0.05; // 5% threshold for rebalancing alert
+    const driftAlerts: Array<{
+      assetClass: string;
+      assetName: string;
+      currentPct: number;
+      optimalPct: number;
+      driftPct: number;
+      action: "increase" | "decrease" | "ok";
+      amountToRebalance: number;
+    }> = [];
+
+    let totalDrift = 0;
+    for (const ac of assetClasses) {
+      const current = currentWeights[ac] ?? 0;
+      const optimal = optimalWeights[ac] ?? 0;
+      const drift = current - optimal;
+      totalDrift += Math.abs(drift);
+
+      const action: "increase" | "decrease" | "ok" =
+        drift > DRIFT_THRESHOLD ? "decrease" : drift < -DRIFT_THRESHOLD ? "increase" : "ok";
+
+      driftAlerts.push({
+        assetClass: ac,
+        assetName: ASSET_PARAMS[ac]?.name ?? ac,
+        currentPct: Math.round(current * 100),
+        optimalPct: Math.round(optimal * 100),
+        driftPct: Math.round(drift * 100),
+        action,
+        amountToRebalance: Math.round(Math.abs(drift) * totalValue),
+      });
+    }
+
+    // Concentration risk: any single holding > 25% of portfolio
+    const concentrationAlerts = holdings
+      .filter((h) => totalValue > 0 && Number(h.currentValue) / totalValue > 0.25)
+      .map((h) => ({
+        instrument: h.instrument,
+        assetClass: h.assetClass,
+        value: Number(h.currentValue),
+        portfolioPct: Math.round((Number(h.currentValue) / totalValue) * 100),
+      }));
+
+    // Weighted average portfolio return
+    const weightedReturn = holdings.reduce((s, h) => {
+      const w = totalValue > 0 ? Number(h.currentValue) / totalValue : 0;
+      return s + w * Number(h.expectedReturn);
+    }, 0);
+
+    // Weighted risk score
+    const weightedRisk = holdings.reduce((s, h) => {
+      const w = totalValue > 0 ? Number(h.currentValue) / totalValue : 0;
+      return s + w * Number(h.riskScore);
+    }, 0);
+
+    const needsRebalancing = totalDrift > DRIFT_THRESHOLD * 2;
+
+    return {
+      totalValue: Math.round(totalValue),
+      holdingsCount: holdings.length,
+      weightedReturn: Math.round(weightedReturn * 100) / 100,
+      weightedRiskScore: Math.round(weightedRisk * 10) / 10,
+      riskTolerance,
+      needsRebalancing,
+      totalDriftPct: Math.round(totalDrift * 100),
+      driftAlerts: driftAlerts.filter((d) => d.action !== "ok"),
+      concentrationAlerts,
+      allAllocations: driftAlerts,
+    };
+  }),
 });

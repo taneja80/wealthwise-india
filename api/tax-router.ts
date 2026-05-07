@@ -5,7 +5,7 @@ import { taxProfiles } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { safeDecimal } from "./lib/validation";
 
-// Indian tax slabs FY 2024-25 (Old Regime)
+// Indian tax slabs FY 2025-26 (Old Regime)
 const OLD_REGIME_SLABS = [
   { limit: 250000, rate: 0 },
   { limit: 500000, rate: 0.05 },
@@ -13,15 +13,21 @@ const OLD_REGIME_SLABS = [
   { limit: Infinity, rate: 0.30 },
 ];
 
-// Indian tax slabs FY 2024-25 (New Regime)
+// Indian tax slabs FY 2025-26 (New Regime) — Union Budget 2025
 const NEW_REGIME_SLABS = [
-  { limit: 300000, rate: 0 },
-  { limit: 600000, rate: 0.05 },
-  { limit: 900000, rate: 0.10 },
-  { limit: 1200000, rate: 0.15 },
-  { limit: 1500000, rate: 0.20 },
+  { limit: 400000, rate: 0 },
+  { limit: 800000, rate: 0.05 },
+  { limit: 1200000, rate: 0.10 },
+  { limit: 1600000, rate: 0.15 },
+  { limit: 2000000, rate: 0.20 },
+  { limit: 2400000, rate: 0.25 },
   { limit: Infinity, rate: 0.30 },
 ];
+
+// Section 87A rebate: no tax if taxable income ≤ ₹12L (new regime)
+const NEW_REGIME_REBATE_LIMIT = 1200000;
+// Old regime rebate: no tax if taxable income ≤ ₹5L
+const OLD_REGIME_REBATE_LIMIT = 500000;
 
 function calculateTax(income: number, slabs: typeof OLD_REGIME_SLABS): number {
   let tax = 0;
@@ -64,8 +70,24 @@ function calculateOldRegimeTaxableIncome(
 }
 
 function calculateNewRegimeTaxableIncome(annualIncome: number): number {
-  const standardDeduction = 50000;
+  const standardDeduction = 75000; // Updated: ₹75K standard deduction in new regime (Budget 2024)
   return Math.max(annualIncome - standardDeduction, 0);
+}
+
+function applyRebate(tax: number, taxableIncome: number, rebateLimit: number): number {
+  // Section 87A: if taxable income is within rebate limit, tax is nil
+  if (taxableIncome <= rebateLimit) return 0;
+  return tax;
+}
+
+/** Determine marginal slab rate for a given taxable income */
+function getMarginalRate(taxableIncome: number, slabs: typeof OLD_REGIME_SLABS): number {
+  let prevLimit = 0;
+  for (const slab of slabs) {
+    if (taxableIncome <= slab.limit) return slab.rate;
+    prevLimit = slab.limit;
+  }
+  return slabs[slabs.length - 1].rate;
 }
 
 export const taxRouter = createRouter({
@@ -151,10 +173,12 @@ export const taxRouter = createRouter({
     const deductions = calculateOldRegimeDeductions(taxProfile as any);
 
     const oldRegimeTaxable = calculateOldRegimeTaxableIncome(annualIncome, deductions, taxProfile as any);
-    const oldRegimeTax = calculateTax(oldRegimeTaxable, OLD_REGIME_SLABS);
+    const oldRegimeTaxRaw = calculateTax(oldRegimeTaxable, OLD_REGIME_SLABS);
+    const oldRegimeTax = applyRebate(oldRegimeTaxRaw, oldRegimeTaxable, OLD_REGIME_REBATE_LIMIT);
 
     const newRegimeTaxable = calculateNewRegimeTaxableIncome(annualIncome);
-    const newRegimeTax = calculateTax(newRegimeTaxable, NEW_REGIME_SLABS);
+    const newRegimeTaxRaw = calculateTax(newRegimeTaxable, NEW_REGIME_SLABS);
+    const newRegimeTax = applyRebate(newRegimeTaxRaw, newRegimeTaxable, NEW_REGIME_REBATE_LIMIT);
 
     const oldRegimeEffectiveRate = annualIncome > 0 ? (oldRegimeTax / annualIncome) * 100 : 0;
     const newRegimeEffectiveRate = annualIncome > 0 ? (newRegimeTax / annualIncome) * 100 : 0;
@@ -163,7 +187,12 @@ export const taxRouter = createRouter({
     const suggestions: string[] = [];
     const unused80c = Math.max(150000 - Number(taxProfile.section80c), 0);
     if (unused80c > 0) {
-      suggestions.push(`You can save up to ₹${(unused80c * 0.30 * 1.04).toFixed(0)} more tax by investing ₹${unused80c.toLocaleString("en-IN")} in 80C instruments (ELSS, PPF, NPS)`);
+      // Use actual marginal rate instead of assuming 30%
+      const marginalRate = getMarginalRate(oldRegimeTaxable, OLD_REGIME_SLABS);
+      const potentialSaving = Math.round(unused80c * marginalRate * 1.04);
+      if (potentialSaving > 0) {
+        suggestions.push(`You can save up to ₹${potentialSaving.toLocaleString("en-IN")} more tax by investing ₹${unused80c.toLocaleString("en-IN")} in 80C instruments (ELSS, PPF, NPS)`);
+      }
     }
     if (!taxProfile.hasNps) {
       suggestions.push("Start NPS (National Pension System) to get additional ₹50,000 deduction under Section 80CCD(1B)");
@@ -190,11 +219,11 @@ export const taxRouter = createRouter({
       },
       newRegime: {
         taxableIncome: newRegimeTaxable,
-        deductions: 50000, // only standard deduction
+        deductions: 75000, // standard deduction (₹75K from Budget 2024)
         taxPayable: Math.round(newRegimeTax),
         effectiveRate: newRegimeEffectiveRate.toFixed(2),
       },
-      savingsPotential: Math.max(0, Math.round(oldRegimeTax - newRegimeTax)),
+      savingsPotential: Math.round(Math.abs(oldRegimeTax - newRegimeTax)),
       recommendedRegime: oldRegimeTax <= newRegimeTax ? "old" : "new" as const,
       unused80c,
       suggestions,

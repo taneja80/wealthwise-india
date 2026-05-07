@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -27,10 +28,17 @@ import {
   Shield,
   Gem,
   TrendingUp,
+  TrendingDown,
   ArrowRight,
   Info,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  ArrowUpRight,
+  Landmark,
+  Coins,
 } from "lucide-react";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatCurrency, formatCompact, formatPercent } from "@/lib/format";
 
 const goalTemplates = [
   { category: "retirement", name: "Retirement Corpus", icon: Shield, defaultAmount: 50000000, defaultYears: 25, defaultReturn: 10 },
@@ -83,11 +91,19 @@ function TooltipLabel({ label, tip }: { label: string; tip: string }) {
   );
 }
 
+const statusConfig = {
+  ahead: { label: "Ahead", icon: ArrowUpRight, color: "text-emerald-600 bg-emerald-50", barColor: "from-emerald-400 to-emerald-600" },
+  on_track: { label: "On Track", icon: CheckCircle2, color: "text-blue-600 bg-blue-50", barColor: "from-blue-400 to-blue-600" },
+  behind: { label: "Behind", icon: AlertTriangle, color: "text-amber-600 bg-amber-50", barColor: "from-amber-400 to-amber-600" },
+  at_risk: { label: "At Risk", icon: XCircle, color: "text-red-600 bg-red-50", barColor: "from-red-400 to-red-600" },
+} as const;
+
 export default function GoalsPage() {
   const { user } = useAuth({ redirectOnUnauthenticated: true });
   const utils = trpc.useUtils();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<number | null>(null);
+  const [includeIlliquid, setIncludeIlliquid] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     category: "retirement" as const,
@@ -103,6 +119,11 @@ export default function GoalsPage() {
   const { data: goals, isLoading } = trpc.goals.list.useQuery(undefined, {
     enabled: !!user,
   });
+
+  const { data: tracking } = trpc.goals.trackProgress.useQuery(
+    { includeIlliquid },
+    { enabled: !!user },
+  );
 
   const createGoal = trpc.goals.create.useMutation({
     onSuccess: () => {
@@ -403,6 +424,146 @@ export default function GoalsPage() {
           </Dialog>
         </motion.div>
 
+        {/* Portfolio & Goal Summary Dashboard */}
+        {tracking && goals && goals.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="space-y-4"
+          >
+            {/* Overall Status Banner */}
+            {(() => {
+              const sc = statusConfig[tracking.summary.overallStatus];
+              const StatusIcon = sc.icon;
+              return (
+                <Card className={`border-l-4 ${tracking.summary.overallStatus === "ahead" || tracking.summary.overallStatus === "on_track" ? "border-l-emerald-500" : tracking.summary.overallStatus === "behind" ? "border-l-amber-500" : "border-l-red-500"}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${sc.color}`}>
+                          <StatusIcon className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-[#0f1a2e]">
+                            Overall: {sc.label}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Projected {formatCompact(tracking.summary.totalProjectedValue)} of {formatCompact(tracking.summary.totalGoalTarget)} target
+                            {tracking.summary.totalShortfall > 0 && (
+                              <span className="text-red-500 ml-1">
+                                · Shortfall {formatCompact(tracking.summary.totalShortfall)}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      {tracking.summary.sipGap > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="text-right cursor-help">
+                              <p className="text-xs text-muted-foreground">Additional SIP needed</p>
+                              <p className="font-semibold text-amber-600">
+                                +{formatCurrency(tracking.summary.sipGap)}/mo
+                              </p>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="text-xs max-w-xs">
+                            <p>Current total SIP: {formatCurrency(tracking.summary.totalCurrentSIP)}/mo</p>
+                            <p>Required total SIP: {formatCurrency(tracking.summary.totalRequiredSIP)}/mo</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Asset Breakdown + Illiquid Toggle */}
+            <div className="grid sm:grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-emerald-500" />
+                    <span className="text-xs text-muted-foreground">Liquid Assets</span>
+                  </div>
+                  <p className="text-lg font-bold text-[#0f1a2e]">
+                    {formatCompact(tracking.summary.totalLiquidAssets)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Equity, Debt, Liquid, International
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Landmark className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs text-muted-foreground">Illiquid Assets</span>
+                  </div>
+                  <p className="text-lg font-bold text-[#0f1a2e]">
+                    {formatCompact(tracking.summary.totalIlliquidAssets)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Real Estate {formatCompact(tracking.summary.illiquidBreakdown.realEstate)} · Gold {formatCompact(tracking.summary.illiquidBreakdown.gold)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-dashed">
+                <CardContent className="p-4 flex flex-col justify-center">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-[#0f1a2e]">Include illiquid assets?</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Consider selling gold/real estate to fund goals
+                      </p>
+                    </div>
+                    <Switch
+                      checked={includeIlliquid}
+                      onCheckedChange={setIncludeIlliquid}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Emergency Fund Status */}
+            {tracking.summary.emergencyFund && (
+              <Card className={`border-l-4 ${
+                tracking.summary.emergencyFund.status === "adequate" ? "border-l-emerald-500" :
+                tracking.summary.emergencyFund.status === "low" ? "border-l-amber-500" : "border-l-red-500"
+              }`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                        tracking.summary.emergencyFund.status === "adequate" ? "bg-emerald-500/10 text-emerald-600" :
+                        tracking.summary.emergencyFund.status === "low" ? "bg-amber-500/10 text-amber-600" : "bg-red-500/10 text-red-600"
+                      }`}>
+                        <Shield className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[#0f1a2e]">
+                          Emergency Fund: {tracking.summary.emergencyFund.status === "adequate" ? "Adequate" : tracking.summary.emergencyFund.status === "low" ? "Low" : "Missing"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Current: {formatCompact(tracking.summary.emergencyFund.current)} · Recommended: {formatCompact(tracking.summary.emergencyFund.recommended)} (6 months expenses)
+                        </p>
+                      </div>
+                    </div>
+                    {tracking.summary.emergencyFund.status !== "adequate" && (
+                      <p className="text-sm font-medium text-amber-600">
+                        Need {formatCompact(tracking.summary.emergencyFund.recommended - tracking.summary.emergencyFund.current)} more
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </motion.div>
+        )}
+
         {goals && goals.length > 0 ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <AnimatePresence>
@@ -412,7 +573,11 @@ export default function GoalsPage() {
                 const progress = Number(goal.targetAmount) > 0
                   ? (Number(goal.currentAmount) / Number(goal.targetAmount)) * 100
                   : 0;
-                const remaining = Number(goal.targetAmount) - Number(goal.currentAmount);
+
+                // Find tracking data for this goal
+                const gt = tracking?.goals.find((g) => g.goalId === goal.id);
+                const sc = gt ? statusConfig[gt.status] : null;
+                const TrackIcon = sc?.icon;
 
                 return (
                   <motion.div
@@ -430,7 +595,14 @@ export default function GoalsPage() {
                               <div className={`w-10 h-10 rounded-xl ${colorClass} flex items-center justify-center`}>
                                 <Icon className="w-5 h-5" />
                               </div>
-                              <div className="flex gap-1">
+                              <div className="flex items-center gap-1">
+                                {/* Status Badge */}
+                                {gt && sc && TrackIcon && (
+                                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${sc.color}`}>
+                                    <TrackIcon className="w-3 h-3" />
+                                    {sc.label}
+                                  </span>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -464,6 +636,7 @@ export default function GoalsPage() {
                               <span className="text-xs text-muted-foreground">{goal.timelineYears} years</span>
                             </div>
 
+                            {/* Progress bar */}
                             <div className="w-full h-2 bg-muted rounded-full overflow-hidden mb-2">
                               <div
                                 className="h-full bg-gradient-to-r from-[#d4a843] to-[#b8923d] rounded-full transition-all"
@@ -478,24 +651,67 @@ export default function GoalsPage() {
                               <span className="font-medium text-[#d4a843]">{formatPercent(progress)}</span>
                             </div>
 
-                            {Number(goal.monthlyContribution) > 0 && (
-                              <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-sm">
-                                <TrendingUp className="w-3 h-3 text-emerald-500" />
-                                <span className="text-muted-foreground">
-                                  SIP: {formatCurrency(goal.monthlyContribution)}/mo
-                                </span>
+                            {/* Projected value & SIP info */}
+                            {gt && (
+                              <div className="mt-3 pt-3 border-t border-border/50 space-y-1.5">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">Projected</span>
+                                  <span className={`font-medium ${gt.status === "ahead" || gt.status === "on_track" ? "text-emerald-600" : "text-amber-600"}`}>
+                                    {formatCompact(gt.projectedValue)}
+                                  </span>
+                                </div>
+                                {Number(goal.monthlyContribution) > 0 && (
+                                  <div className="flex items-center justify-between text-sm">
+                                    <div className="flex items-center gap-1">
+                                      <TrendingUp className="w-3 h-3 text-emerald-500" />
+                                      <span className="text-muted-foreground">SIP</span>
+                                    </div>
+                                    <span className="text-muted-foreground">
+                                      {formatCurrency(goal.monthlyContribution)}/mo
+                                    </span>
+                                  </div>
+                                )}
+                                {gt.sipGap > 0 && (
+                                  <div className="flex items-center justify-between text-sm">
+                                    <div className="flex items-center gap-1">
+                                      <TrendingDown className="w-3 h-3 text-red-400" />
+                                      <span className="text-muted-foreground">SIP gap</span>
+                                    </div>
+                                    <span className="text-red-500 font-medium">
+                                      +{formatCurrency(gt.sipGap)}/mo
+                                    </span>
+                                  </div>
+                                )}
+                                {gt.shortfall > 0 && gt.illiquidCanCover > 0 && !includeIlliquid && (
+                                  <div className="flex items-center gap-1 text-xs text-amber-600 mt-1">
+                                    <Coins className="w-3 h-3" />
+                                    <span>
+                                      Selling assets could cover {formatCompact(gt.illiquidCanCover)}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </CardContent>
                         </Card>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs text-xs">
+                      <TooltipContent side="bottom" className="max-w-xs text-xs space-y-0.5">
                         <p className="font-medium text-[#0f1a2e]">{goal.name}</p>
                         <p>Category: {goal.category} · Priority: {goal.priority}</p>
-                        <p>Target: {formatCurrency(goal.targetAmount)}</p>
+                        <p>Target (today): {formatCurrency(goal.targetAmount)}</p>
+                        {gt && gt.inflationAdjustedTarget > gt.targetAmount && (
+                          <p className="text-amber-600">Target (inflation-adjusted): {formatCurrency(gt.inflationAdjustedTarget)}</p>
+                        )}
                         <p>Saved: {formatCurrency(goal.currentAmount)} ({formatPercent(progress)})</p>
-                        <p>Remaining: {formatCurrency(remaining)}</p>
-                        <p>Monthly SIP: {formatCurrency(goal.monthlyContribution)}</p>
+                        {gt && (
+                          <>
+                            <p>Projected at maturity: {formatCurrency(gt.projectedValue)}</p>
+                            {gt.shortfall > 0 && <p className="text-red-500">Shortfall: {formatCurrency(gt.shortfall)}</p>}
+                            {gt.surplus > 0 && <p className="text-emerald-500">Surplus: {formatCurrency(gt.surplus)}</p>}
+                            <p>Required SIP: {formatCurrency(gt.requiredMonthlySIP)}/mo</p>
+                            <p>Current SIP: {formatCurrency(goal.monthlyContribution)}/mo</p>
+                          </>
+                        )}
                         <p>Expected Return: {goal.expectedReturn}%</p>
                         <p>Timeline: {goal.timelineYears} years</p>
                       </TooltipContent>
