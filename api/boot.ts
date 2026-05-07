@@ -11,6 +11,10 @@ import { Paths } from "@contracts/constants";
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+
+// Health check endpoint (non-tRPC, for Render/load balancers)
+app.get("/api/ping", (c) => c.json({ ok: true, ts: Date.now() }));
+
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({
