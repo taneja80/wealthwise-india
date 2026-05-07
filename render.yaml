@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build && npx drizzle-kit push --force
+    buildCommand: npm install --include=dev && npm run build && npx drizzle-kit push --force
     startCommand: npm start
     envVars:
       - key: NODE_ENV
