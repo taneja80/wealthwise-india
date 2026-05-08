@@ -4,6 +4,7 @@ import { getDb } from "./queries/connection";
 import { assetHoldings, assetProjections, financialProfiles, userProfiles } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { safeDecimal } from "./lib/validation";
+import { fetchAMFIData } from "./mf-router";
 
 // Asset class parameters for CAPM/Mean-Variance Optimization
 // Returns are post-tax, inflation-adjusted real returns
@@ -189,6 +190,8 @@ export const assetRouter = createRouter({
           "equity_ltcg", "debt_interest", "debt_ltcg", "gold_ltcg",
           "real_estate_ltcg", "tax_free", "epf_tax_deferred",
         ]).default("equity_ltcg"),
+        schemeCode: z.string().max(20).optional(),
+        units: safeDecimal({ min: 0 }).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -202,9 +205,124 @@ export const assetRouter = createRouter({
         expectedReturn: String(input.expectedReturn),
         riskScore: String(input.riskScore),
         taxTreatment: input.taxTreatment,
+        schemeCode: input.schemeCode ?? null,
+        units: input.units != null ? String(input.units) : null,
       });
       return { success: true };
     }),
+
+  updateHolding: authedQuery
+    .input(
+      z.object({
+        id: z.number(),
+        instrument: z.string().min(1).max(255).optional(),
+        currentValue: safeDecimal({ min: 0 }).optional(),
+        monthlySip: safeDecimal({ min: 0 }).optional(),
+        expectedReturn: safeDecimal({ min: 0, max: 100 }).optional(),
+        schemeCode: z.string().max(20).nullable().optional(),
+        units: safeDecimal({ min: 0 }).nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const holding = await db.query.assetHoldings.findFirst({
+        where: eq(assetHoldings.id, input.id),
+      });
+      if (!holding || holding.userId !== ctx.user.id) {
+        throw new Error("Holding not found");
+      }
+      const updates: Partial<typeof assetHoldings.$inferInsert> = {};
+      if (input.instrument !== undefined) updates.instrument = input.instrument;
+      if (input.currentValue !== undefined) updates.currentValue = String(input.currentValue);
+      if (input.monthlySip !== undefined) updates.monthlySip = String(input.monthlySip);
+      if (input.expectedReturn !== undefined) updates.expectedReturn = String(input.expectedReturn);
+      if (input.schemeCode !== undefined) updates.schemeCode = input.schemeCode;
+      if (input.units !== undefined) updates.units = input.units != null ? String(input.units) : null;
+      await db.update(assetHoldings).set(updates).where(eq(assetHoldings.id, input.id));
+      return { success: true };
+    }),
+
+  /**
+   * Refresh NAV for a single holding using its schemeCode.
+   * Fetches latest NAV from AMFI and recalculates currentValue = units × nav.
+   */
+  refreshNAV: authedQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const holding = await db.query.assetHoldings.findFirst({
+        where: eq(assetHoldings.id, input.id),
+      });
+      if (!holding || holding.userId !== ctx.user.id) {
+        throw new Error("Holding not found");
+      }
+      if (!holding.schemeCode || !holding.units) {
+        throw new Error("This holding has no scheme code or units — cannot auto-refresh NAV");
+      }
+      const schemes = await fetchAMFIData();
+      const scheme = schemes.find((s) => s.schemeCode === holding.schemeCode);
+      if (!scheme) {
+        throw new Error(`Scheme ${holding.schemeCode} not found in AMFI data`);
+      }
+      const nav = parseFloat(scheme.nav);
+      if (isNaN(nav) || nav <= 0) {
+        throw new Error(`Invalid NAV value for scheme ${holding.schemeCode}`);
+      }
+      const units = parseFloat(String(holding.units));
+      const newValue = nav * units;
+      await db.update(assetHoldings).set({
+        currentValue: String(newValue.toFixed(2)),
+        navDate: scheme.date,
+      }).where(eq(assetHoldings.id, input.id));
+      return { success: true, nav, navDate: scheme.date, newValue: Math.round(newValue) };
+    }),
+
+  /**
+   * Refresh NAV for all holdings of the current user that have a schemeCode + units.
+   * Single AMFI fetch, then update all matching holdings in a transaction.
+   */
+  refreshAllNAV: authedQuery.mutation(async ({ ctx }) => {
+    const db = getDb();
+    const userHoldings = await db.query.assetHoldings.findMany({
+      where: eq(assetHoldings.userId, ctx.user.id),
+    });
+    const mfHoldings = userHoldings.filter(
+      (h) => h.schemeCode && h.units && parseFloat(String(h.units)) > 0,
+    );
+    if (mfHoldings.length === 0) {
+      return { updated: 0, skipped: 0, errors: [] };
+    }
+    const schemes = await fetchAMFIData();
+    const schemeMap = new Map(schemes.map((s) => [s.schemeCode, s]));
+
+    let updated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    await db.transaction(async (tx) => {
+      for (const h of mfHoldings) {
+        const scheme = schemeMap.get(h.schemeCode!);
+        if (!scheme) {
+          skipped++;
+          continue;
+        }
+        const nav = parseFloat(scheme.nav);
+        if (isNaN(nav) || nav <= 0) {
+          errors.push(`${h.instrument}: invalid NAV`);
+          continue;
+        }
+        const units = parseFloat(String(h.units));
+        const newValue = nav * units;
+        await tx.update(assetHoldings).set({
+          currentValue: String(newValue.toFixed(2)),
+          navDate: scheme.date,
+        }).where(eq(assetHoldings.id, h.id));
+        updated++;
+      }
+    });
+
+    return { updated, skipped, errors };
+  }),
 
   deleteHolding: authedQuery
     .input(z.object({ id: z.number() }))

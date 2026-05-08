@@ -21,8 +21,9 @@ const SCHEME_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
  * Fetch all NAV data from AMFI India.
  * Source: https://www.amfiindia.com/spages/NAVAll.txt
  * Format: semicolon-delimited text with headers per fund house.
+ * Exported so other routers (e.g. asset-router) can reuse the cached data.
  */
-async function fetchAMFIData(): Promise<MFScheme[]> {
+export async function fetchAMFIData(): Promise<MFScheme[]> {
   const now = Date.now();
   if (schemeCache.length > 0 && now - schemeCacheTimestamp < SCHEME_CACHE_TTL) {
     return schemeCache;

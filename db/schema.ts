@@ -169,6 +169,10 @@ export const assetHoldings = pgTable("asset_holdings", {
   expectedReturn: decimal("expectedReturn", { precision: 5, scale: 2 }).notNull(),
   riskScore: decimal("riskScore", { precision: 4, scale: 2 }).default("5.00"),
   taxTreatment: taxTreatmentEnum("taxTreatment").default("equity_ltcg"),
+  // Mutual fund specific fields for auto NAV refresh
+  schemeCode: varchar("schemeCode", { length: 20 }),
+  units: decimal("units", { precision: 18, scale: 4 }),
+  navDate: varchar("navDate", { length: 20 }),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull().$onUpdate(() => new Date()),
 });

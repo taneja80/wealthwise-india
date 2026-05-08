@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,11 +81,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function SIPCalculatorPage() {
-  const [monthlySip, setMonthlySip] = useState(10000);
-  const [lumpsum, setLumpsum] = useState(0);
-  const [expectedReturn, setExpectedReturn] = useState(12);
-  const [timePeriod, setTimePeriod] = useState(15);
+  const [searchParams] = useSearchParams();
+  const [monthlySip, setMonthlySip] = useState(() => Number(searchParams.get("sip")) || 10000);
+  const [lumpsum, setLumpsum] = useState(() => Number(searchParams.get("lumpsum")) || 0);
+  const [expectedReturn, setExpectedReturn] = useState(() => Number(searchParams.get("return")) || 12);
+  const [timePeriod, setTimePeriod] = useState(() => Number(searchParams.get("years")) || 15);
   const [stepUp, setStepUp] = useState(0);
+  const goalName = searchParams.get("goal");
 
   const chartData = useMemo(
     () => generateChartData(monthlySip, lumpsum, expectedReturn, timePeriod, stepUp),
@@ -108,6 +111,17 @@ export default function SIPCalculatorPage() {
           Plan your mutual fund investments with SIP, lumpsum, and step-up analysis
         </p>
       </motion.div>
+
+      {goalName && (
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#d4a843]/10 border border-[#d4a843]/30 text-sm">
+            <Calculator className="w-4 h-4 text-[#d4a843]" />
+            <span className="text-[#0f1a2e] font-medium">Planning for goal:</span>
+            <span className="text-[#d4a843] font-semibold">{goalName}</span>
+            <span className="text-muted-foreground ml-1">— values pre-filled from your goal</span>
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid lg:grid-cols-5 gap-6">
         {/* Inputs */}

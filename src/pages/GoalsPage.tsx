@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,9 @@ import {
   ArrowUpRight,
   Landmark,
   Coins,
+  Zap,
+  PieChart,
+  Calculator,
 } from "lucide-react";
 import { formatCurrency, formatCompact, formatPercent } from "@/lib/format";
 
@@ -75,6 +79,91 @@ const categoryColors: Record<string, string> = {
   other: "bg-gray-50 text-gray-600",
 };
 
+// ---- Investment Journey helpers ----
+
+interface AllocationBand {
+  type: string;
+  percent: number;
+  color: string;
+  example: string;
+}
+
+interface AllocationRecommendation {
+  label: string;
+  labelColor: string;
+  bands: AllocationBand[];
+  rationale: string;
+  expectedReturn: number;
+}
+
+function getAllocationRecommendation(years: number): AllocationRecommendation {
+  if (years <= 3) {
+    return {
+      label: "Conservative",
+      labelColor: "text-blue-600",
+      bands: [
+        { type: "Liquid / Money Market", percent: 30, color: "bg-blue-300", example: "Liquid funds, overnight funds" },
+        { type: "Short-term Debt", percent: 50, color: "bg-blue-600", example: "Ultra-short, low-duration debt funds" },
+        { type: "Equity (Large Cap)", percent: 20, color: "bg-emerald-500", example: "Nifty 50 index fund" },
+      ],
+      rationale: "Short timeline — capital protection is priority. Debt + liquid instruments limit volatility.",
+      expectedReturn: 7,
+    };
+  } else if (years <= 7) {
+    return {
+      label: "Moderate",
+      labelColor: "text-purple-600",
+      bands: [
+        { type: "Equity (Large Cap)", percent: 35, color: "bg-emerald-500", example: "Flexi-cap or large-cap funds" },
+        { type: "Equity (Mid Cap)", percent: 15, color: "bg-emerald-400", example: "Mid-cap funds" },
+        { type: "Debt Funds", percent: 40, color: "bg-blue-600", example: "Corporate bond, banking & PSU funds" },
+        { type: "Liquid", percent: 10, color: "bg-blue-300", example: "Liquid / ultra-short funds" },
+      ],
+      rationale: "Medium timeline — balanced growth with stability. Enough equity for returns, debt for cushion.",
+      expectedReturn: 9,
+    };
+  } else if (years <= 15) {
+    return {
+      label: "Growth",
+      labelColor: "text-emerald-600",
+      bands: [
+        { type: "Equity (Large Cap)", percent: 40, color: "bg-emerald-500", example: "Index funds, flexi-cap" },
+        { type: "Equity (Mid / Small Cap)", percent: 30, color: "bg-emerald-400", example: "Mid-cap, small-cap funds" },
+        { type: "Debt Funds", percent: 25, color: "bg-blue-600", example: "Dynamic bond, gilt funds" },
+        { type: "International Equity", percent: 5, color: "bg-purple-500", example: "US / global equity funds" },
+      ],
+      rationale: "Long timeline — equity-heavy allocation for compounding growth, with debt for rebalancing.",
+      expectedReturn: 11,
+    };
+  } else {
+    return {
+      label: "Aggressive Growth",
+      labelColor: "text-[#d4a843]",
+      bands: [
+        { type: "Equity (Large Cap)", percent: 40, color: "bg-emerald-500", example: "Nifty 50 / Sensex index funds" },
+        { type: "Equity (Mid / Small Cap)", percent: 35, color: "bg-emerald-400", example: "Mid-cap, small-cap funds" },
+        { type: "International Equity", percent: 15, color: "bg-purple-500", example: "NASDAQ / global index funds" },
+        { type: "Debt (Minimal)", percent: 10, color: "bg-blue-600", example: "Long-duration gilt funds" },
+      ],
+      rationale: "Very long timeline — maximise equity compounding. Power of 15+ years absorbs short-term volatility.",
+      expectedReturn: 13,
+    };
+  }
+}
+
+function computeLumpsumNeeded(shortfall: number, returnRate: number, years: number): number {
+  if (years <= 0) return shortfall;
+  return shortfall / Math.pow(1 + returnRate / 100, years);
+}
+
+function computeSIPForGap(shortfall: number, returnRate: number, years: number): number {
+  const n = years * 12;
+  const r = returnRate / 100 / 12;
+  if (n <= 0) return shortfall;
+  if (r === 0) return shortfall / n;
+  return shortfall / (((Math.pow(1 + r, n) - 1) / r) * (1 + r));
+}
+
 function TooltipLabel({ label, tip }: { label: string; tip: string }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -100,9 +189,11 @@ const statusConfig = {
 
 export default function GoalsPage() {
   const { user } = useAuth({ redirectOnUnauthenticated: true });
+  const navigate = useNavigate();
   const utils = trpc.useUtils();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<number | null>(null);
+  const [planningGoalId, setPlanningGoalId] = useState<number | null>(null);
   const [includeIlliquid, setIncludeIlliquid] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -690,6 +781,18 @@ export default function GoalsPage() {
                                     </span>
                                   </div>
                                 )}
+                                {gt.sipGap > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPlanningGoalId(goal.id);
+                                    }}
+                                    className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a2744] hover:bg-[#1a2744]/90 text-white text-xs font-medium transition-colors"
+                                  >
+                                    <Zap className="w-3 h-3" />
+                                    Build Investment Plan
+                                  </button>
+                                )}
                               </div>
                             )}
                           </CardContent>
@@ -747,6 +850,193 @@ export default function GoalsPage() {
           </motion.div>
         )}
       </div>
+
+      {/* Investment Plan Dialog */}
+      {(() => {
+        if (!planningGoalId || !goals || !tracking) return null;
+        const goal = goals.find((g) => g.id === planningGoalId);
+        const gt = tracking.goals.find((g) => g.goalId === planningGoalId);
+        if (!goal || !gt) return null;
+
+        const years = Number(goal.timelineYears);
+        const alloc = getAllocationRecommendation(years);
+        const shortfall = gt.shortfall;
+        const requiredSIP = gt.requiredMonthlySIP;
+        const currentSIP = Number(goal.monthlyContribution);
+        const lumpsumNeeded = computeLumpsumNeeded(shortfall, alloc.expectedReturn, years);
+        const sipGapOnly = computeSIPForGap(shortfall, alloc.expectedReturn, years);
+        const Icon = categoryIcons[goal.category] || Target;
+        const colorClass = categoryColors[goal.category] || categoryColors.other;
+
+        const goToSIPCalc = (opts: { sip?: number; lumpsum?: number }) => {
+          const params = new URLSearchParams({
+            sip: String(Math.round(opts.sip ?? requiredSIP)),
+            lumpsum: String(Math.round(opts.lumpsum ?? 0)),
+            return: String(alloc.expectedReturn),
+            years: String(years),
+            goal: goal.name,
+          });
+          navigate(`/sip-calculator?${params.toString()}`);
+        };
+
+        return (
+          <Dialog open={!!planningGoalId} onOpenChange={(open) => { if (!open) setPlanningGoalId(null); }}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg ${colorClass} flex items-center justify-center`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  Investment Plan: {goal.name}
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-5 pt-2">
+                {/* Gap Summary */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Shortfall at Maturity</p>
+                    <p className="text-base font-bold text-red-600">{formatCompact(shortfall)}</p>
+                  </div>
+                  <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Current SIP</p>
+                    <p className="text-base font-bold text-[#0f1a2e]">{formatCurrency(currentSIP)}/mo</p>
+                  </div>
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Required SIP</p>
+                    <p className="text-base font-bold text-emerald-600">{formatCurrency(requiredSIP)}/mo</p>
+                  </div>
+                </div>
+
+                {/* Asset Allocation Recommendation */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <PieChart className="w-4 h-4 text-[#d4a843]" />
+                    <h3 className="font-semibold text-[#0f1a2e] text-sm">Suggested Asset Allocation</h3>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-muted ${alloc.labelColor}`}>{alloc.label}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{alloc.rationale}</p>
+
+                  {/* Stacked allocation bar */}
+                  <div className="flex rounded-full overflow-hidden h-4 w-full gap-px">
+                    {alloc.bands.map((band) => (
+                      <div
+                        key={band.type}
+                        className={`${band.color} transition-all`}
+                        style={{ width: `${band.percent}%` }}
+                        title={`${band.type}: ${band.percent}%`}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {alloc.bands.map((band) => (
+                      <div key={band.type} className="flex items-start gap-2 text-xs">
+                        <div className={`w-2.5 h-2.5 rounded-sm mt-0.5 shrink-0 ${band.color}`} />
+                        <div>
+                          <span className="font-medium text-[#0f1a2e]">{band.type}</span>
+                          <span className="text-muted-foreground"> · {band.percent}%</span>
+                          <p className="text-muted-foreground/70">{band.example}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Expected return for this allocation: <span className="font-medium text-[#0f1a2e]">~{alloc.expectedReturn}% p.a.</span>
+                  </p>
+                </div>
+
+                {/* Two investment routes */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-[#0f1a2e] text-sm flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-[#d4a843]" />
+                    Choose Your Investment Route
+                  </h3>
+
+                  {/* Route 1: SIP only */}
+                  <div className="rounded-xl border border-border/60 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm text-[#0f1a2e]">Monthly SIP</p>
+                        <p className="text-xs text-muted-foreground">Invest a fixed amount every month — easiest to sustain</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-emerald-600">{formatCurrency(requiredSIP)}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
+                        {currentSIP > 0 && (
+                          <p className="text-xs text-muted-foreground">↑ {formatCurrency(gt.sipGap)}/mo more needed</p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full bg-[#1a2744] hover:bg-[#1a2744]/90 text-white gap-2"
+                      onClick={() => goToSIPCalc({ sip: requiredSIP, lumpsum: 0 })}
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      Plan this SIP in Calculator
+                      <ArrowRight className="w-3.5 h-3.5 ml-auto" />
+                    </Button>
+                  </div>
+
+                  {/* Route 2: Lumpsum only */}
+                  <div className="rounded-xl border border-border/60 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm text-[#0f1a2e]">One-time Lumpsum</p>
+                        <p className="text-xs text-muted-foreground">Invest a lump sum today and let it compound</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-blue-600">{formatCompact(lumpsumNeeded)}</p>
+                        <p className="text-xs text-muted-foreground">needed today</p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => goToSIPCalc({ sip: 0, lumpsum: Math.round(lumpsumNeeded) })}
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      Plan this Lumpsum in Calculator
+                      <ArrowRight className="w-3.5 h-3.5 ml-auto" />
+                    </Button>
+                  </div>
+
+                  {/* Route 3: Hybrid (current SIP + smaller lumpsum) */}
+                  {currentSIP > 0 && shortfall > 0 && (
+                    <div className="rounded-xl border border-[#d4a843]/30 bg-[#d4a843]/5 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm text-[#0f1a2e]">Hybrid (SIP + Lumpsum)</p>
+                          <p className="text-xs text-muted-foreground">Keep current SIP, top-up with a one-time amount</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-[#d4a843]">{formatCurrency(currentSIP)}/mo</p>
+                          <p className="text-xs font-semibold text-[#d4a843]">+ {formatCompact(lumpsumNeeded)} lumpsum</p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-[#d4a843]/40 text-[#d4a843] hover:bg-[#d4a843]/10 gap-2"
+                        onClick={() => goToSIPCalc({ sip: currentSIP, lumpsum: Math.round(lumpsumNeeded) })}
+                      >
+                        <Calculator className="w-3.5 h-3.5" />
+                        Explore Hybrid in Calculator
+                        <ArrowRight className="w-3.5 h-3.5 ml-auto" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground text-center">
+                  Projections assume ~{alloc.expectedReturn}% p.a. returns. Actual returns may vary. Please consult a financial advisor before investing.
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </TooltipProvider>
   );
 }
