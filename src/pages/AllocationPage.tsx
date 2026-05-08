@@ -173,9 +173,9 @@ export default function AllocationPage() {
                             ))}
                           </Pie>
                           <ReTooltip
-                            formatter={(value: number, name: string) => [
-                              formatCurrency(value),
-                              name,
+                            formatter={(value: unknown, name: unknown) => [
+                              formatCurrency(value as number),
+                              name as string,
                             ]}
                           />
                           <Legend />
