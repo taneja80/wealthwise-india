@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate, Outlet } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -236,14 +236,8 @@ export function Navigation() {
   );
 }
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AppLayout() {
   const location = useLocation();
-  const isLanding = location.pathname === "/";
-  const isLogin = location.pathname === "/login";
-
-  if (isLanding || isLogin) {
-    return <>{children}</>;
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -258,7 +252,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             transition={{ duration: 0.3 }}
             className="p-4 lg:p-8"
           >
-            {children}
+            <Outlet />
           </motion.div>
         </AnimatePresence>
       </main>

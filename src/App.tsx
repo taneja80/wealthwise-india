@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from "react-router";
+import { createBrowserRouter, RouterProvider } from "react-router";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
@@ -20,36 +20,33 @@ import MFSearchPage from "./pages/MFSearchPage";
 import WhatIfPage from "./pages/WhatIfPage";
 import { AppLayout } from "./components/Navigation";
 
-function AppRoutes() {
-  const location = useLocation();
-
-  return (
-    <AppLayout>
-      <Routes location={location}>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/profile-setup" element={<ProfileSetup />} />
-        <Route path="/financial-profile" element={<FinancialProfile />} />
-        <Route path="/goals" element={<GoalsPage />} />
-        <Route path="/cash-flow" element={<CashFlowPage />} />
-        <Route path="/allocation" element={<AllocationPage />} />
-        <Route path="/advisor" element={<ChatPage />} />
-        <Route path="/tax-planning" element={<TaxPage />} />
-        <Route path="/assets" element={<AssetPage />} />
-        <Route path="/retirement" element={<RetirementPage />} />
-        <Route path="/import" element={<ImportPage />} />
-        <Route path="/sip-calculator" element={<SIPCalculatorPage />} />
-        <Route path="/emi-calculator" element={<EMICalculatorPage />} />
-        <Route path="/currency" element={<CurrencyPage />} />
-        <Route path="/mf-search" element={<MFSearchPage />} />
-        <Route path="/what-if" element={<WhatIfPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </AppLayout>
-  );
-}
+const router = createBrowserRouter([
+  { path: "/", element: <Home /> },
+  { path: "/login", element: <Login /> },
+  {
+    element: <AppLayout />,
+    children: [
+      { path: "/dashboard", element: <Dashboard /> },
+      { path: "/profile-setup", element: <ProfileSetup /> },
+      { path: "/financial-profile", element: <FinancialProfile /> },
+      { path: "/goals", element: <GoalsPage /> },
+      { path: "/cash-flow", element: <CashFlowPage /> },
+      { path: "/allocation", element: <AllocationPage /> },
+      { path: "/advisor", element: <ChatPage /> },
+      { path: "/tax-planning", element: <TaxPage /> },
+      { path: "/assets", element: <AssetPage /> },
+      { path: "/retirement", element: <RetirementPage /> },
+      { path: "/import", element: <ImportPage /> },
+      { path: "/sip-calculator", element: <SIPCalculatorPage /> },
+      { path: "/emi-calculator", element: <EMICalculatorPage /> },
+      { path: "/currency", element: <CurrencyPage /> },
+      { path: "/mf-search", element: <MFSearchPage /> },
+      { path: "/what-if", element: <WhatIfPage /> },
+      { path: "*", element: <NotFound /> },
+    ],
+  },
+]);
 
 export default function App() {
-  return <AppRoutes />;
+  return <RouterProvider router={router} />;
 }
