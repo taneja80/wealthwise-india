@@ -19,11 +19,21 @@ import {
 } from "recharts";
 import { formatCurrency, formatCompact } from "@/lib/format";
 
-function computeSIP(monthly: number, rate: number, years: number) {
-  const n = years * 12;
-  const r = rate / 100 / 12;
-  if (r === 0) return monthly * n;
-  return monthly * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
+type SipFrequency = "weekly" | "fortnightly" | "monthly" | "quarterly";
+
+const FREQUENCY_CONFIG: Record<SipFrequency, { label: string; periodsPerYear: number }> = {
+  weekly: { label: "Weekly", periodsPerYear: 52 },
+  fortnightly: { label: "Fortnightly", periodsPerYear: 26 },
+  monthly: { label: "Monthly", periodsPerYear: 12 },
+  quarterly: { label: "Quarterly", periodsPerYear: 4 },
+};
+
+function computeSIP(amount: number, rate: number, years: number, frequency: SipFrequency = "monthly") {
+  const ppy = FREQUENCY_CONFIG[frequency].periodsPerYear;
+  const n = years * ppy;
+  const r = rate / 100 / ppy;
+  if (r === 0) return amount * n;
+  return amount * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
 }
 
 function computeLumpsum(principal: number, rate: number, years: number) {
@@ -31,24 +41,25 @@ function computeLumpsum(principal: number, rate: number, years: number) {
 }
 
 function generateChartData(
-  monthly: number,
+  sipAmount: number,
   lumpsum: number,
   rate: number,
   years: number,
   stepUpPercent: number,
+  frequency: SipFrequency = "monthly",
 ) {
+  const ppy = FREQUENCY_CONFIG[frequency].periodsPerYear;
   const data = [];
   let totalInvested = lumpsum;
-  let currentSip = monthly;
+  let currentSip = sipAmount;
   let corpus = lumpsum;
 
   for (let year = 1; year <= years; year++) {
-    const monthlyRate = rate / 100 / 12;
-    // Grow lumpsum + accumulated corpus
-    for (let m = 0; m < 12; m++) {
-      corpus = corpus * (1 + monthlyRate) + currentSip;
+    const periodRate = rate / 100 / ppy;
+    for (let p = 0; p < ppy; p++) {
+      corpus = corpus * (1 + periodRate) + currentSip;
     }
-    totalInvested += currentSip * 12;
+    totalInvested += currentSip * ppy;
 
     data.push({
       year,
@@ -87,11 +98,12 @@ export default function SIPCalculatorPage() {
   const [expectedReturn, setExpectedReturn] = useState(() => Number(searchParams.get("return")) || 12);
   const [timePeriod, setTimePeriod] = useState(() => Number(searchParams.get("years")) || 15);
   const [stepUp, setStepUp] = useState(0);
+  const [frequency, setFrequency] = useState<SipFrequency>("monthly");
   const goalName = searchParams.get("goal");
 
   const chartData = useMemo(
-    () => generateChartData(monthlySip, lumpsum, expectedReturn, timePeriod, stepUp),
-    [monthlySip, lumpsum, expectedReturn, timePeriod, stepUp],
+    () => generateChartData(monthlySip, lumpsum, expectedReturn, timePeriod, stepUp, frequency),
+    [monthlySip, lumpsum, expectedReturn, timePeriod, stepUp, frequency],
   );
 
   const finalData = chartData[chartData.length - 1];
@@ -135,10 +147,32 @@ export default function SIPCalculatorPage() {
               <CardTitle className="text-base">Investment Parameters</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
+              {/* SIP Frequency */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-2 block">SIP Frequency</Label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(Object.entries(FREQUENCY_CONFIG) as [SipFrequency, { label: string }][]).map(
+                    ([key, { label }]) => (
+                      <button
+                        key={key}
+                        onClick={() => setFrequency(key)}
+                        className={`text-xs py-1.5 px-2 rounded-md border transition-colors ${
+                          frequency === key
+                            ? "bg-[#0f1a2e] text-white border-[#0f1a2e]"
+                            : "border-border hover:border-[#d4a843]/50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label className="flex items-center gap-1.5">
-                    <IndianRupee className="w-3.5 h-3.5" /> Monthly SIP
+                    <IndianRupee className="w-3.5 h-3.5" /> {FREQUENCY_CONFIG[frequency].label} SIP
                   </Label>
                   <span className="text-sm font-medium">{formatCurrency(monthlySip)}</span>
                 </div>

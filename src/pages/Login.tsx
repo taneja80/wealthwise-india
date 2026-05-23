@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
-import { ArrowRight, Wallet, Mail, LogIn, UserPlus, Eye, EyeOff, KeyRound, ArrowLeft } from "lucide-react";
+import { ArrowRight, Wallet, LogIn, UserPlus, Eye, EyeOff, KeyRound, ArrowLeft } from "lucide-react";
 
 const SECURITY_QUESTIONS = [
   "What is the name of your first pet?",
@@ -17,22 +17,6 @@ const SECURITY_QUESTIONS = [
   "What is your favourite movie?",
   "What is the name of your childhood best friend?",
 ];
-
-function getOAuthUrl() {
-  const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
-  const appID = import.meta.env.VITE_APP_ID;
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = crypto.randomUUID();
-  document.cookie = `oauth_state=${state}; path=/; max-age=600; SameSite=Lax`;
-  document.cookie = `oauth_redirect_uri=${encodeURIComponent(redirectUri)}; path=/; max-age=600; SameSite=Lax`;
-  const url = new URL(`${kimiAuthUrl}/api/oauth/authorize`);
-  url.searchParams.set("client_id", appID);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "profile");
-  url.searchParams.set("state", state);
-  return url.toString();
-}
 
 export default function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -54,24 +38,26 @@ export default function Login() {
 
   const loginMutation = trpc.localAuth.login.useMutation({
     onSuccess: (data) => {
+      setPassword("");
       if (data.success) {
         window.location.href = "/dashboard";
       } else {
         setError(data.error ?? "Login failed");
       }
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => { setPassword(""); setError(err.message); },
   });
 
   const registerMutation = trpc.localAuth.register.useMutation({
     onSuccess: (data) => {
+      setPassword("");
       if (data.success) {
         window.location.href = "/dashboard";
       } else {
         setError(data.error ?? "Registration failed");
       }
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => { setPassword(""); setError(err.message); },
   });
 
   const getQuestionMutation = trpc.localAuth.getSecurityQuestion.useMutation({
@@ -122,7 +108,6 @@ export default function Login() {
   };
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
-  const kimiEnabled = Boolean(import.meta.env.VITE_KIMI_AUTH_URL && import.meta.env.VITE_APP_ID);
 
   const exitForgotMode = () => {
     setForgotMode("idle");
@@ -374,27 +359,6 @@ export default function Login() {
                     </form>
                   </TabsContent>
                 </Tabs>
-
-                {kimiEnabled && (
-                  <>
-                    <div className="relative my-4">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-border/50" />
-                      </div>
-                      <div className="relative flex justify-center text-xs">
-                        <span className="bg-white px-3 text-muted-foreground">or continue with</span>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      className="w-full h-11 border-[#1a2744]/20 hover:bg-[#1a2744]/5"
-                      onClick={() => { window.location.href = getOAuthUrl(); }}
-                    >
-                      <Mail className="w-4 h-4 mr-2" />
-                      Kimi OAuth Sign In
-                    </Button>
-                  </>
-                )}
 
                 <p className="text-xs text-muted-foreground text-center">
                   By signing in, you agree to our Terms of Service and Privacy Policy.

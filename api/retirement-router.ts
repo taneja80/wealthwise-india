@@ -179,4 +179,114 @@ export const retirementRouter = createRouter({
       postRetirement: postRetirementYears,
     };
   }),
+
+  // Monte Carlo simulation — run N simulations with randomized returns
+  monteCarlo: authedQuery
+    .input(z.object({
+      simulations: z.number().int().min(100).max(5000).default(1000),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+      const uProfile = await db.query.userProfiles.findFirst({
+        where: eq(userProfiles.userId, ctx.user.id),
+      });
+      const fProfile = await db.query.financialProfiles.findFirst({
+        where: eq(financialProfiles.userId, ctx.user.id),
+      });
+      const model = await db.query.retirementModels.findFirst({
+        where: eq(retirementModels.userId, ctx.user.id),
+      });
+
+      if (!uProfile || !fProfile) return null;
+
+      const age = uProfile.age;
+      const retirementAge = model?.retirementAge ?? 60;
+      const yearsToRetirement = Math.max(retirementAge - age, 1);
+      const currentAssets = Number(fProfile.totalAssets);
+      const monthlyIncome = Number(fProfile.monthlyIncome);
+      const monthlyExpenses = Number(fProfile.monthlyExpenses);
+      const monthlySavings = Math.max(monthlyIncome - monthlyExpenses, 0);
+
+      // Parameters for return distribution (mean, std dev)
+      const meanReturn = 0.10; // 10% average annual return
+      const stdDev = 0.15; // 15% annual volatility (Indian equity market historical)
+      const inflationMean = 0.06;
+      const inflationStd = 0.02;
+      const numSims = input?.simulations ?? 1000;
+
+      // Box-Muller transform for normal random numbers
+      function normalRandom(mean: number, std: number): number {
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        return mean + std * z;
+      }
+
+      // Run simulations
+      const allPaths: number[][] = [];
+      const finalCorpusValues: number[] = [];
+
+      for (let sim = 0; sim < numSims; sim++) {
+        let corpus = currentAssets;
+        let annualSavings = monthlySavings * 12;
+        const path: number[] = [corpus];
+
+        for (let year = 1; year <= yearsToRetirement; year++) {
+          const yearReturn = normalRandom(meanReturn, stdDev);
+          const yearInflation = normalRandom(inflationMean, inflationStd);
+          corpus = corpus * (1 + yearReturn) + annualSavings;
+          annualSavings *= (1 + Math.min(yearInflation, 0.10)); // salary grows ~ inflation
+          path.push(Math.round(corpus));
+        }
+
+        allPaths.push(path);
+        finalCorpusValues.push(corpus);
+      }
+
+      // Calculate percentiles for each year
+      const percentileData: Array<{
+        year: number;
+        age: number;
+        p10: number;
+        p25: number;
+        p50: number;
+        p75: number;
+        p90: number;
+      }> = [];
+
+      for (let y = 0; y <= yearsToRetirement; y++) {
+        const values = allPaths.map((p) => p[y]).sort((a, b) => a - b);
+        percentileData.push({
+          year: y,
+          age: age + y,
+          p10: Math.round(values[Math.floor(numSims * 0.10)]),
+          p25: Math.round(values[Math.floor(numSims * 0.25)]),
+          p50: Math.round(values[Math.floor(numSims * 0.50)]),
+          p75: Math.round(values[Math.floor(numSims * 0.75)]),
+          p90: Math.round(values[Math.floor(numSims * 0.90)]),
+        });
+      }
+
+      // Final corpus stats
+      finalCorpusValues.sort((a, b) => a - b);
+      const corpusNeeded = model
+        ? Number(model.currentMonthlyExpense) * Math.pow(1.06, yearsToRetirement) * 0.7 * 12 / 0.035
+        : monthlySavings * 12 * 25;
+
+      return {
+        simulations: numSims,
+        percentileData,
+        corpusTarget: Math.round(corpusNeeded),
+        finalCorpus: {
+          p10: Math.round(finalCorpusValues[Math.floor(numSims * 0.10)]),
+          p25: Math.round(finalCorpusValues[Math.floor(numSims * 0.25)]),
+          p50: Math.round(finalCorpusValues[Math.floor(numSims * 0.50)]),
+          p75: Math.round(finalCorpusValues[Math.floor(numSims * 0.75)]),
+          p90: Math.round(finalCorpusValues[Math.floor(numSims * 0.90)]),
+        },
+        successRate: Math.round(
+          (finalCorpusValues.filter((v) => v >= corpusNeeded).length / numSims) * 100
+        ),
+      };
+    }),
 });

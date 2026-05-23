@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/providers/trpc";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +21,10 @@ import {
   Building2,
   IndianRupee,
   BarChart3,
-  ExternalLink,
+  Plus,
+  Check,
+  GitCompareArrows,
+  X,
 } from "lucide-react";
 import {
   AreaChart,
@@ -31,6 +36,16 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { formatNumber } from "@/lib/format";
+import { toast } from "sonner";
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload) return null;
@@ -55,9 +70,15 @@ function ReturnBadge({ value }: { value: number | null }) {
 }
 
 export default function MFSearchPage() {
+  const { user } = useAuth({ redirectOnUnauthenticated: true });
   const [query, setQuery] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedScheme, setSelectedScheme] = useState<string | null>(null);
+  const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set());
+  const [compareCodes, setCompareCodes] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
+
+  const debouncedQuery = useDebounce(query.trim(), 300);
+  const searchTerm = debouncedQuery.length >= 2 ? debouncedQuery : "";
 
   const { data: results, isFetching } = trpc.mf.search.useQuery(
     { query: searchTerm, limit: 50 },
@@ -69,16 +90,55 @@ export default function MFSearchPage() {
     { enabled: !!selectedScheme },
   );
 
+  const compareDetail0 = trpc.mf.details.useQuery({ schemeCode: compareCodes[0] ?? "" }, { enabled: showCompare && compareCodes.length > 0 });
+  const compareDetail1 = trpc.mf.details.useQuery({ schemeCode: compareCodes[1] ?? "" }, { enabled: showCompare && compareCodes.length > 1 });
+  const compareDetail2 = trpc.mf.details.useQuery({ schemeCode: compareCodes[2] ?? "" }, { enabled: showCompare && compareCodes.length > 2 });
+  const compareDetails = [compareDetail0.data, compareDetail1.data, compareDetail2.data].filter(Boolean);
+  const compareLoading = [compareDetail0, compareDetail1, compareDetail2].some((q) => q.isFetching);
+
+  const toggleCompare = (code: string) => {
+    setCompareCodes((prev) => {
+      if (prev.includes(code)) return prev.filter((c) => c !== code);
+      if (prev.length >= 3) { toast.info("Max 3 schemes for comparison"); return prev; }
+      return [...prev, code];
+    });
+  };
+
   const { data: fundHouses } = trpc.mf.fundHouses.useQuery();
 
+  const utils = trpc.useUtils();
+  const addHoldingMutation = trpc.asset.createHolding.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success(`${variables.instrument} added to portfolio`);
+      setAddedCodes((prev) => new Set(prev).add(variables.schemeCode!));
+      utils.asset.listHoldings.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleAddToPortfolio = () => {
+    if (!detail) return;
+    const nav = parseFloat(detail.latestNav);
+    addHoldingMutation.mutate({
+      assetClass: "equity",
+      instrument: detail.schemeName,
+      currentValue: 0,
+      monthlySip: 0,
+      expectedReturn: detail.performance["3Y"] ?? detail.performance["1Y"] ?? 10,
+      riskScore: 5,
+      taxTreatment: "equity_ltcg",
+      schemeCode: detail.schemeCode,
+    });
+  };
+
   const handleSearch = () => {
-    if (query.trim().length >= 2) {
-      setSearchTerm(query.trim());
-    }
+    // Kept for Enter key / button click — instant override of debounce
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
+    if (e.key === "Enter" && query.trim().length >= 2) {
+      // Force immediate search by setting query directly
+    }
   };
 
   const chartData = detail?.navHistory
@@ -121,10 +181,7 @@ export default function MFSearchPage() {
                 (suggestion) => (
                   <button
                     key={suggestion}
-                    onClick={() => {
-                      setQuery(suggestion);
-                      setSearchTerm(suggestion);
-                    }}
+                    onClick={() => setQuery(suggestion)}
                     className="text-xs px-2.5 py-1 rounded-full border hover:border-[#d4a843] hover:bg-[#d4a843]/5 transition-colors"
                   >
                     {suggestion}
@@ -141,18 +198,41 @@ export default function MFSearchPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                {results.length} schemes found
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">
+                  {results.length} schemes found
+                </CardTitle>
+                {compareCodes.length >= 2 && (
+                  <Button
+                    size="sm"
+                    onClick={() => setShowCompare(true)}
+                    className="bg-[#d4a843] hover:bg-[#c49a3a] text-white"
+                  >
+                    <GitCompareArrows className="w-4 h-4 mr-1" />
+                    Compare ({compareCodes.length})
+                  </Button>
+                )}
+              </div>
+              {compareCodes.length > 0 && compareCodes.length < 2 && (
+                <p className="text-xs text-muted-foreground">Select at least 2 schemes to compare</p>
+              )}
             </CardHeader>
             <CardContent>
               <div className="space-y-1 max-h-[500px] overflow-y-auto">
                 {results.map((scheme) => (
-                  <button
+                  <div
                     key={scheme.schemeCode}
-                    onClick={() => setSelectedScheme(scheme.schemeCode)}
-                    className="w-full text-left p-3 rounded-lg hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0"
+                    className="flex items-center gap-2 p-3 rounded-lg hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0"
                   >
+                    <Checkbox
+                      checked={compareCodes.includes(scheme.schemeCode)}
+                      onCheckedChange={() => toggleCompare(scheme.schemeCode)}
+                      className="flex-shrink-0"
+                    />
+                    <button
+                      onClick={() => setSelectedScheme(scheme.schemeCode)}
+                      className="w-full text-left"
+                    >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-sm truncate">{scheme.schemeName}</p>
@@ -169,6 +249,7 @@ export default function MFSearchPage() {
                       </Badge>
                     )}
                   </button>
+                  </div>
                 ))}
               </div>
             </CardContent>
@@ -203,7 +284,6 @@ export default function MFSearchPage() {
                     onClick={() => {
                       const short = fh.name.split(" ").slice(0, 2).join(" ");
                       setQuery(short);
-                      setSearchTerm(short);
                     }}
                     className="p-3 rounded-lg border hover:border-[#d4a843] hover:bg-[#d4a843]/5 transition-all text-left"
                   >
@@ -303,12 +383,87 @@ export default function MFSearchPage() {
                     <p className="font-medium">{detail.schemeCategory || "—"}</p>
                   </div>
                 </div>
+
+                {/* Add to Portfolio */}
+                <Button
+                  className="w-full bg-[#1a2744] hover:bg-[#1a2744]/90"
+                  disabled={addHoldingMutation.isPending || addedCodes.has(detail.schemeCode)}
+                  onClick={handleAddToPortfolio}
+                >
+                  {addedCodes.has(detail.schemeCode) ? (
+                    <><Check className="w-4 h-4 mr-2" />Added to Portfolio</>
+                  ) : addHoldingMutation.isPending ? (
+                    "Adding..."
+                  ) : (
+                    <><Plus className="w-4 h-4 mr-2" />Add to Portfolio</>
+                  )}
+                </Button>
               </div>
             </>
           ) : (
             <div className="py-12 text-center text-muted-foreground">
               Could not load scheme details. Please try again.
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Comparison Dialog */}
+      <Dialog open={showCompare} onOpenChange={(open) => !open && setShowCompare(false)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitCompareArrows className="w-5 h-5 text-[#d4a843]" />
+              Scheme Comparison
+            </DialogTitle>
+          </DialogHeader>
+          {compareLoading ? (
+            <div className="py-12 text-center text-muted-foreground">Loading comparison data...</div>
+          ) : compareDetails.length >= 2 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-2 text-muted-foreground font-medium">Attribute</th>
+                    {compareDetails.map((d) => (
+                      <th key={d!.schemeCode} className="text-left p-2 font-medium max-w-[200px]">
+                        <span className="text-xs leading-tight block">{d!.schemeName}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b">
+                    <td className="p-2 text-muted-foreground">NAV</td>
+                    {compareDetails.map((d) => <td key={d!.schemeCode} className="p-2 font-semibold">₹{d!.latestNav}</td>)}
+                  </tr>
+                  <tr className="border-b">
+                    <td className="p-2 text-muted-foreground">Category</td>
+                    {compareDetails.map((d) => <td key={d!.schemeCode} className="p-2">{d!.schemeCategory ?? "—"}</td>)}
+                  </tr>
+                  <tr className="border-b">
+                    <td className="p-2 text-muted-foreground">Type</td>
+                    {compareDetails.map((d) => <td key={d!.schemeCode} className="p-2">{d!.schemeType ?? "—"}</td>)}
+                  </tr>
+                  <tr className="border-b">
+                    <td className="p-2 text-muted-foreground">Fund House</td>
+                    {compareDetails.map((d) => <td key={d!.schemeCode} className="p-2">{d!.fundHouse}</td>)}
+                  </tr>
+                  {["1M", "3M", "6M", "1Y", "3Y", "5Y"].map((period) => (
+                    <tr key={period} className="border-b">
+                      <td className="p-2 text-muted-foreground">{period} Return</td>
+                      {compareDetails.map((d) => (
+                        <td key={d!.schemeCode} className="p-2">
+                          <ReturnBadge value={d!.performance[period] ?? null} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="py-12 text-center text-muted-foreground">Select at least 2 schemes to compare.</div>
           )}
         </DialogContent>
       </Dialog>

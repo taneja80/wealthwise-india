@@ -326,8 +326,14 @@ export const assetRouter = createRouter({
 
   deleteHolding: authedQuery
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = getDb();
+      const holding = await db.query.assetHoldings.findFirst({
+        where: eq(assetHoldings.id, input.id),
+      });
+      if (!holding || holding.userId !== ctx.user.id) {
+        throw new Error("Holding not found");
+      }
       await db.delete(assetHoldings).where(eq(assetHoldings.id, input.id));
       return { success: true };
     }),

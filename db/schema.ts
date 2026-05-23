@@ -46,8 +46,15 @@ export const taxTreatmentEnum = pgEnum("tax_treatment", [
   "epf_tax_deferred",
 ]);
 export const regimeEnum = pgEnum("regime", ["old", "new"]);
+export const txnTypeEnum = pgEnum("txn_type", ["sip", "emi", "subscription", "insurance", "rent", "other"]);
+export const txnFrequencyEnum = pgEnum("txn_frequency", ["weekly", "monthly", "quarterly", "yearly"]);
+export const expenseCategoryEnum = pgEnum("expense_category", [
+  "rent", "groceries", "utilities", "emi", "insurance", "entertainment",
+  "education", "healthcare", "transport", "subscriptions", "shopping", "dining", "other",
+]);
+export const familyRelationEnum = pgEnum("family_relation", ["self", "spouse", "parent", "child", "sibling"]);
 
-// ---- Users (OAuth) ----
+// ---- Users (OAuth - legacy, kept for migration compatibility) ----
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   unionId: varchar("unionId", { length: 255 }).notNull().unique(),
@@ -229,6 +236,51 @@ export const assetProjections = pgTable("asset_projections", {
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
 });
 
+// ---- Recurring Transactions ----
+export const recurringTransactions = pgTable("recurring_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: txnTypeEnum("type").notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  frequency: txnFrequencyEnum("frequency").default("monthly").notNull(),
+  dueDay: integer("dueDay").notNull(), // day of month (1-31)
+  startDate: varchar("startDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  endDate: varchar("endDate", { length: 10 }), // null = ongoing
+  autoPay: boolean("autoPay").default(false),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+// ---- Family Members ----
+export const familyMembers = pgTable("family_members", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(), // owner/primary account
+  name: varchar("name", { length: 255 }).notNull(),
+  relation: familyRelationEnum("relation").notNull(),
+  age: integer("age"),
+  monthlyIncome: decimal("monthlyIncome", { precision: 15, scale: 2 }).default("0"),
+  monthlyExpenses: decimal("monthlyExpenses", { precision: 15, scale: 2 }).default("0"),
+  totalAssets: decimal("totalAssets", { precision: 15, scale: 2 }).default("0"),
+  totalLiabilities: decimal("totalLiabilities", { precision: 15, scale: 2 }).default("0"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+// ---- Expense Categories ----
+export const expenseBreakdown = pgTable("expense_breakdown", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  category: expenseCategoryEnum("category").notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  month: varchar("month", { length: 7 }).notNull(), // YYYY-MM
+  notes: text("notes"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
 // ---- Chat Messages ----
 export const chatMessages = pgTable("chat_messages", {
   id: serial("id").primaryKey(),
@@ -259,3 +311,9 @@ export type AssetProjection = typeof assetProjections.$inferSelect;
 export type InsertAssetProjection = typeof assetProjections.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = typeof chatMessages.$inferInsert;
+export type RecurringTransaction = typeof recurringTransactions.$inferSelect;
+export type InsertRecurringTransaction = typeof recurringTransactions.$inferInsert;
+export type FamilyMember = typeof familyMembers.$inferSelect;
+export type InsertFamilyMember = typeof familyMembers.$inferInsert;
+export type ExpenseBreakdown = typeof expenseBreakdown.$inferSelect;
+export type InsertExpenseBreakdown = typeof expenseBreakdown.$inferInsert;

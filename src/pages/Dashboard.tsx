@@ -24,6 +24,14 @@ import { Link } from "react-router";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import {
+  PieChart as RechartsPie,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as ReTooltip,
+  Legend,
+} from "recharts";
+import {
   Target,
   TrendingUp,
   Wallet,
@@ -39,13 +47,27 @@ import {
   Shield,
   Download,
   Trash2,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 import { formatCurrency, formatCompact, formatPercent } from "@/lib/format";
+
+function timeAgo(timestamp: number): string {
+  if (!timestamp) return "";
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export default function Dashboard() {
   const { user, isLoading: authLoading, logout } = useAuth({ redirectOnUnauthenticated: true });
   const { data: userProfile } = trpc.profile.getUserProfile.useQuery(undefined, { enabled: !!user });
-  const { data: financialProfile } = trpc.profile.getFinancialProfile.useQuery(undefined, { enabled: !!user });
+  const { data: financialProfile, dataUpdatedAt: fpUpdatedAt } = trpc.profile.getFinancialProfile.useQuery(undefined, { enabled: !!user });
   const { data: goals } = trpc.goals.list.useQuery(undefined, { enabled: !!user });
 
   const [deleteConfirm, setDeleteConfirm] = useState("");
@@ -80,6 +102,33 @@ export default function Dashboard() {
   const { data: portfolioHealth } = trpc.asset.portfolioHealth.useQuery(undefined, {
     enabled: !!user,
   });
+  const { data: holdings, dataUpdatedAt: holdingsUpdatedAt } = trpc.asset.listHoldings.useQuery(undefined, {
+    enabled: !!user,
+  });
+
+  const ALLOC_COLORS: Record<string, string> = {
+    equity: "#6366f1",
+    debt: "#f59e0b",
+    gold: "#d4a843",
+    real_estate: "#10b981",
+    liquid: "#3b82f6",
+    international: "#8b5cf6",
+  };
+
+  const allocationData = (() => {
+    if (!holdings || holdings.length === 0) return [];
+    const byClass: Record<string, number> = {};
+    for (const h of holdings) {
+      byClass[h.assetClass] = (byClass[h.assetClass] ?? 0) + Number(h.currentValue);
+    }
+    return Object.entries(byClass)
+      .filter(([, v]) => v > 0)
+      .map(([cls, value]) => ({
+        name: cls.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: Math.round(value),
+        color: ALLOC_COLORS[cls] ?? "#94a3b8",
+      }));
+  })();
 
   if (authLoading) {
     return (
@@ -153,33 +202,76 @@ export default function Dashboard() {
     <TooltipProvider delayDuration={300}>
       <div className="max-w-6xl mx-auto space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-bold text-[#0f1a2e]">
-            Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Here&apos;s your financial overview at a glance
-          </p>
+          <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-2">
+            <div>
+              <h1 className="text-2xl font-bold text-[#0f1a2e]">
+                Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Here&apos;s your financial overview at a glance
+              </p>
+            </div>
+            {(fpUpdatedAt > 0 || holdingsUpdatedAt > 0) && (
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {fpUpdatedAt > 0 && (
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50">
+                    <Clock className="w-3 h-3" /> Financials: {timeAgo(fpUpdatedAt)}
+                  </span>
+                )}
+                {holdingsUpdatedAt > 0 && (
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50">
+                    <Clock className="w-3 h-3" /> Portfolio: {timeAgo(holdingsUpdatedAt)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </motion.div>
 
         {!hasProfile && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card className="border-[#d4a843]/30 bg-gradient-to-r from-[#d4a843]/5 to-transparent">
-              <CardContent className="p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-[#d4a843]/10 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="w-5 h-5 text-[#d4a843]" />
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-[#d4a843]/10 flex items-center justify-center">
+                    <Wallet className="w-5 h-5 text-[#d4a843]" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-[#0f1a2e]">Welcome to WealthWise!</h3>
+                    <p className="text-sm text-muted-foreground">Complete these 3 steps to unlock your personalized financial plan</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-[#0f1a2e]">Complete Your Profile</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Set up your financial profile to unlock personalized cash flow projections and investment recommendations.
-                  </p>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {[
+                    { step: 1, label: "Set Up Profile", description: "Age, profession, family details", path: "/profile-setup", done: !!userProfile },
+                    { step: 2, label: "Financial Details", description: "Income, expenses, assets & liabilities", path: "/financial-profile", done: !!financialProfile },
+                    { step: 3, label: "Create First Goal", description: "Retirement, home, education, etc.", path: "/goals", done: totalGoals > 0 },
+                  ].map((item) => (
+                    <Link key={item.step} to={item.path}>
+                      <div className={`p-4 rounded-xl border transition-all hover:shadow-md ${
+                        item.done
+                          ? "bg-emerald-50 border-emerald-200"
+                          : "bg-white border-border hover:border-[#d4a843]/50"
+                      }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {item.done ? (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                          ) : (
+                            <Circle className="w-5 h-5 text-muted-foreground/30" />
+                          )}
+                          <span className="text-xs font-medium text-muted-foreground">Step {item.step}</span>
+                        </div>
+                        <p className={`text-sm font-semibold ${item.done ? "text-emerald-700" : "text-[#0f1a2e]"}`}>{item.label}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                        {!item.done && (
+                          <span className="inline-flex items-center gap-1 text-xs text-[#d4a843] font-medium mt-2">
+                            Get started <ArrowRight className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                    </Link>
+                  ))}
                 </div>
-                <Link to="/profile-setup">
-                  <Button className="bg-[#1a2744] hover:bg-[#1a2744]/90 whitespace-nowrap">
-                    Get Started
-                    <ArrowRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </Link>
               </CardContent>
             </Card>
           </motion.div>
@@ -261,6 +353,47 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
+          </motion.div>
+        )}
+
+        {/* Portfolio Allocation Donut */}
+        {allocationData.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <PieChart className="w-4 h-4 text-[#d4a843]" />
+                  Portfolio Allocation
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPie>
+                      <Pie
+                        data={allocationData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={3}
+                        dataKey="value"
+                        nameKey="name"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {allocationData.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <ReTooltip
+                        formatter={(value: number) => [`₹${value.toLocaleString("en-IN")}`, "Value"]}
+                      />
+                      <Legend />
+                    </RechartsPie>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
           </motion.div>
         )}
 

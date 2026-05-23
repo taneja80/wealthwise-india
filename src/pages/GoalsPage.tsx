@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
@@ -43,6 +43,7 @@ import {
   Calculator,
 } from "lucide-react";
 import { formatCurrency, formatCompact, formatPercent } from "@/lib/format";
+import { toast } from "sonner";
 
 const goalTemplates = [
   { category: "retirement", name: "Retirement Corpus", icon: Shield, defaultAmount: 50000000, defaultYears: 25, defaultReturn: 10 },
@@ -215,6 +216,28 @@ export default function GoalsPage() {
     { includeIlliquid },
     { enabled: !!user },
   );
+
+  // Milestone toasts — show once per session per milestone
+  const shownMilestones = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!goals) return;
+    for (const goal of goals) {
+      const progress = Number(goal.targetAmount) > 0
+        ? (Number(goal.currentAmount) / Number(goal.targetAmount)) * 100
+        : 0;
+      for (const milestone of [25, 50, 75, 100]) {
+        const key = `${goal.id}-${milestone}`;
+        if (progress >= milestone && !shownMilestones.current.has(key)) {
+          shownMilestones.current.add(key);
+          if (milestone === 100) {
+            toast.success(`🎉 "${goal.name}" is fully funded!`);
+          } else {
+            toast.success(`🏆 "${goal.name}" has reached ${milestone}% of target!`);
+          }
+        }
+      }
+    }
+  }, [goals]);
 
   const createGoal = trpc.goals.create.useMutation({
     onSuccess: () => {

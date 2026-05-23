@@ -3,6 +3,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   LayoutDashboard,
   Target,
   TrendingUp,
@@ -21,9 +29,16 @@ import {
   Globe,
   BarChart3,
   GitCompareArrows,
+  Sun,
+  Moon,
+  Search,
+  CalendarClock,
+  Users,
+  Coins,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "next-themes";
 
 const navItems = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -39,6 +54,9 @@ const navItems = [
   { label: "EMI Calculator", path: "/emi-calculator", icon: Banknote },
   { label: "What-If", path: "/what-if", icon: GitCompareArrows },
   { label: "Currency", path: "/currency", icon: Globe },
+  { label: "Recurring", path: "/recurring", icon: CalendarClock },
+  { label: "Family", path: "/family", icon: Users },
+  { label: "Expenses", path: "/expenses", icon: Coins },
   { label: "Advisor", path: "/advisor", icon: MessageSquare },
   { label: "Profile", path: "/profile-setup", icon: User },
 ];
@@ -48,7 +66,27 @@ export function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
   const isLanding = location.pathname === "/";
+
+  // Ctrl+K / Cmd+K to open command palette
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCmdOpen((open) => !open);
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  const handleNav = useCallback((path: string) => {
+    navigate(path);
+    setCmdOpen(false);
+    setMobileOpen(false);
+  }, [navigate]);
 
   if (isLanding) {
     return (
@@ -157,7 +195,26 @@ export function Navigation() {
           </div>
         </div>
 
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-white/10 space-y-1">
+          {/* Quick search hint */}
+          <button
+            onClick={() => setCmdOpen(true)}
+            className="flex items-center gap-3 w-full px-4 py-2 rounded-xl text-xs text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span className="flex-1 text-left">Quick Navigate</span>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-white/20 bg-white/5">Ctrl+K</kbd>
+          </button>
+
+          {/* Dark mode toggle */}
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="flex items-center gap-3 w-full px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          </button>
+
           {isAuthenticated && user && (
             <div className="flex items-center gap-3 mb-3">
               {user.avatar && (
@@ -232,6 +289,35 @@ export function Navigation() {
           </Sheet>
         </div>
       </div>
+
+      {/* Command Palette */}
+      <CommandDialog open={cmdOpen} onOpenChange={setCmdOpen}>
+        <CommandInput placeholder="Search pages..." />
+        <CommandList>
+          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandGroup heading="Pages">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <CommandItem
+                  key={item.path}
+                  onSelect={() => handleNav(item.path)}
+                  className="flex items-center gap-2"
+                >
+                  <Icon className="w-4 h-4" />
+                  {item.label}
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+          <CommandGroup heading="Actions">
+            <CommandItem onSelect={() => { setTheme(theme === "dark" ? "light" : "dark"); setCmdOpen(false); }}>
+              {theme === "dark" ? <Sun className="w-4 h-4 mr-2" /> : <Moon className="w-4 h-4 mr-2" />}
+              Toggle {theme === "dark" ? "Light" : "Dark"} Mode
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
     </>
   );
 }

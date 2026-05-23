@@ -18,6 +18,9 @@ import EMICalculatorPage from "./pages/EMICalculatorPage";
 import CurrencyPage from "./pages/CurrencyPage";
 import MFSearchPage from "./pages/MFSearchPage";
 import WhatIfPage from "./pages/WhatIfPage";
+import RecurringPage from "./pages/RecurringPage";
+import FamilyPage from "./pages/FamilyPage";
+import ExpensesPage from "./pages/ExpensesPage";
 import { AppLayout } from "./components/Navigation";
 
 const router = createBrowserRouter([
@@ -42,6 +45,9 @@ const router = createBrowserRouter([
       { path: "/currency", element: <CurrencyPage /> },
       { path: "/mf-search", element: <MFSearchPage /> },
       { path: "/what-if", element: <WhatIfPage /> },
+      { path: "/recurring", element: <RecurringPage /> },
+      { path: "/family", element: <FamilyPage /> },
+      { path: "/expenses", element: <ExpensesPage /> },
       { path: "*", element: <NotFound /> },
     ],
   },

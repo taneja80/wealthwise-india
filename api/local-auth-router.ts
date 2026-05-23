@@ -162,7 +162,7 @@ export const localAuthRouter = createRouter({
         where: eq(localUsers.email, input.email),
       });
       if (!user || !user.securityQuestion) {
-        return { success: false, error: "No account found with this email or no security question set" };
+        return { success: false, error: "Account verification failed" };
       }
       return { success: true, securityQuestion: user.securityQuestion };
     }),

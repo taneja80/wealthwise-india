@@ -9,8 +9,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
-import { RefreshCw, Target, TrendingUp, AlertCircle, Info } from "lucide-react";
-import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, Legend } from "recharts";
+import { RefreshCw, Target, TrendingUp, TrendingDown, AlertCircle, Info, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { formatCurrency } from "@/lib/format";
 
 const COLORS = ["#1a2744", "#d4a843", "#10b981", "#8b5cf6", "#f59e0b", "#3b82f6"];
@@ -66,6 +66,10 @@ export default function AllocationPage() {
     enabled: !!user,
   });
 
+  const { data: holdings } = trpc.asset.listHoldings.useQuery(undefined, {
+    enabled: !!user,
+  });
+
   const handleRefresh = () => {
     utils.allocation.generate.invalidate();
     refetch();
@@ -86,6 +90,37 @@ export default function AllocationPage() {
     }
     return acc;
   }, [] as Array<{ assetClass: string; recommendedAmount: number; allocationPercent: number; expectedReturn: number }>);
+
+  // Build current vs recommended comparison data
+  const comparisonData = (() => {
+    if (!aggregated || aggregated.length === 0 || !holdings || holdings.length === 0) return null;
+    const totalRecommended = aggregated.reduce((s, a) => s + a.allocationPercent, 0);
+    const totalHoldingValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
+    if (totalHoldingValue === 0) return null;
+
+    const currentByClass: Record<string, number> = {};
+    for (const h of holdings) {
+      currentByClass[h.assetClass] = (currentByClass[h.assetClass] ?? 0) + Number(h.currentValue);
+    }
+
+    const allClasses = [...new Set([...aggregated.map((a) => a.assetClass), ...Object.keys(currentByClass)])];
+    return allClasses.map((cls) => {
+      const recItem = aggregated.find((a) => a.assetClass === cls);
+      const recommendedPct = recItem && totalRecommended > 0 ? (recItem.allocationPercent / totalRecommended) * 100 : 0;
+      const currentPct = totalHoldingValue > 0 ? ((currentByClass[cls] ?? 0) / totalHoldingValue) * 100 : 0;
+      const diff = currentPct - recommendedPct;
+      const amountToMove = Math.round(Math.abs(diff / 100) * totalHoldingValue);
+      return {
+        name: (assetClassLabels[cls] ?? cls).replace(" / ", "\n"),
+        shortName: cls.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        current: Math.round(currentPct),
+        recommended: Math.round(recommendedPct),
+        diff: Math.round(diff),
+        amountToMove,
+        action: diff > 3 ? "decrease" as const : diff < -3 ? "increase" as const : "ok" as const,
+      };
+    });
+  })();
 
   const pieData = aggregated?.map((a) => ({
     name: assetClassLabels[a.assetClass] ?? a.assetClass,
@@ -260,6 +295,82 @@ export default function AllocationPage() {
                 </Card>
               </motion.div>
             </div>
+
+            {/* Current vs Recommended Comparison */}
+            {comparisonData && comparisonData.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+              >
+                <Card>
+                  <CardHeader className="pb-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CardTitle className="text-lg cursor-help flex items-center gap-2">
+                          Current vs Recommended
+                          <Info className="w-3.5 h-3.5 text-muted-foreground/40" />
+                        </CardTitle>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-xs">
+                        <p>Compare your actual portfolio allocation against the recommended allocation. Bars show percentage of total portfolio per asset class.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64 mb-4">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={comparisonData} barGap={2}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis dataKey="shortName" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                          <ReTooltip
+                            formatter={(value: number, name: string) => [`${value}%`, name === "current" ? "Current" : "Recommended"]}
+                          />
+                          <Bar dataKey="current" name="Current" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="recommended" name="Recommended" fill="#d4a843" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Rebalancing action items */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-[#0f1a2e]">Rebalancing Actions</p>
+                      {comparisonData.filter((d) => d.action !== "ok").length === 0 ? (
+                        <p className="text-sm text-emerald-600 flex items-center gap-1">
+                          <TrendingUp className="w-4 h-4" /> Your portfolio is well-balanced!
+                        </p>
+                      ) : (
+                        comparisonData
+                          .filter((d) => d.action !== "ok")
+                          .map((d) => (
+                            <div
+                              key={d.shortName}
+                              className={`flex items-center justify-between p-2.5 rounded-lg text-sm ${
+                                d.action === "increase"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                {d.action === "increase" ? (
+                                  <ArrowUpRight className="w-4 h-4" />
+                                ) : (
+                                  <ArrowDownRight className="w-4 h-4" />
+                                )}
+                                <span className="font-medium">{d.shortName}</span>
+                              </div>
+                              <span>
+                                {d.action === "increase" ? "Increase" : "Decrease"} by ~{formatCurrency(d.amountToMove)} ({Math.abs(d.diff)}%)
+                              </span>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
 
             {/* Per-Goal Allocations */}
             <motion.div

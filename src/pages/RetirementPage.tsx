@@ -76,6 +76,7 @@ export default function RetirementPage() {
   const utils = trpc.useUtils();
   const { data: model } = trpc.retirement.getModel.useQuery();
   const { data: calculation } = trpc.retirement.calculate.useQuery();
+  const { data: monteCarlo } = trpc.retirement.monteCarlo.useQuery();
   const { data: fProfile } = trpc.profile.getFinancialProfile.useQuery();
   const { data: uProfile } = trpc.profile.getUserProfile.useQuery();
 
@@ -296,6 +297,7 @@ export default function RetirementPage() {
               <TabsList>
                 <TabsTrigger value="pre">Pre-Retirement</TabsTrigger>
                 <TabsTrigger value="post">Post-Retirement</TabsTrigger>
+                <TabsTrigger value="monte">Monte Carlo</TabsTrigger>
               </TabsList>
 
               <TabsContent value="pre" className="mt-4">
@@ -383,6 +385,91 @@ export default function RetirementPage() {
                       </CardContent>
                     </Card>
                   </>
+                )}
+              </TabsContent>
+
+              {/* Monte Carlo Simulation */}
+              <TabsContent value="monte" className="mt-4 space-y-4">
+                {monteCarlo ? (
+                  <>
+                    {/* Success rate card */}
+                    <Card className={`border-2 ${monteCarlo.successRate >= 75 ? "border-emerald-300 bg-emerald-50/50" : monteCarlo.successRate >= 50 ? "border-amber-300 bg-amber-50/50" : "border-red-300 bg-red-50/50"}`}>
+                      <CardContent className="p-5 text-center">
+                        <p className="text-sm text-muted-foreground mb-1">Probability of Reaching Target Corpus</p>
+                        <p className={`text-5xl font-bold ${monteCarlo.successRate >= 75 ? "text-emerald-600" : monteCarlo.successRate >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                          {monteCarlo.successRate}%
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Target: {formatCompact(monteCarlo.corpusTarget)} · Based on 1000 simulations
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Percentile cards */}
+                    <div className="grid grid-cols-5 gap-2">
+                      {[
+                        { label: "Pessimistic (10th)", value: monteCarlo.finalCorpus.p10, color: "text-red-600" },
+                        { label: "25th %ile", value: monteCarlo.finalCorpus.p25, color: "text-amber-600" },
+                        { label: "Median (50th)", value: monteCarlo.finalCorpus.p50, color: "text-blue-600" },
+                        { label: "75th %ile", value: monteCarlo.finalCorpus.p75, color: "text-emerald-500" },
+                        { label: "Optimistic (90th)", value: monteCarlo.finalCorpus.p90, color: "text-emerald-700" },
+                      ].map((p) => (
+                        <Card key={p.label}>
+                          <CardContent className="p-3 text-center">
+                            <p className="text-[10px] text-muted-foreground leading-tight">{p.label}</p>
+                            <p className={`text-sm font-bold ${p.color}`}>{formatCompact(p.value)}</p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Probability cone chart */}
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-[#d4a843]" />
+                          Corpus Probability Cone
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={monteCarlo.percentileData}>
+                              <defs>
+                                <linearGradient id="mc_p10_90" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.08} />
+                                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
+                                </linearGradient>
+                                <linearGradient id="mc_p25_75" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0.05} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis dataKey="age" stroke="#94a3b8" fontSize={12} label={{ value: "Age", position: "insideBottom", offset: -5 }} />
+                              <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(v) => formatCompact(v)} />
+                              <ReTooltip content={<CustomTooltip />} />
+                              <Legend />
+                              <Area type="monotone" dataKey="p10" name="10th %ile" stroke="#e5e7eb" strokeWidth={1} fill="url(#mc_p10_90)" strokeDasharray="4 2" />
+                              <Area type="monotone" dataKey="p25" name="25th %ile" stroke="#a5b4fc" strokeWidth={1} fill="url(#mc_p25_75)" strokeDasharray="4 2" />
+                              <Area type="monotone" dataKey="p50" name="Median" stroke="#6366f1" strokeWidth={2.5} fill="transparent" />
+                              <Area type="monotone" dataKey="p75" name="75th %ile" stroke="#a5b4fc" strokeWidth={1} fill="transparent" strokeDasharray="4 2" />
+                              <Area type="monotone" dataKey="p90" name="90th %ile" stroke="#e5e7eb" strokeWidth={1} fill="transparent" strokeDasharray="4 2" />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2 text-center">
+                          Shaded area shows the range of possible outcomes. The cone widens over time reflecting greater uncertainty.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <Card>
+                    <CardContent className="p-8 text-center text-muted-foreground">
+                      Set up your profile and retirement parameters to run Monte Carlo simulations.
+                    </CardContent>
+                  </Card>
                 )}
               </TabsContent>
             </Tabs>

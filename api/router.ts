@@ -13,6 +13,9 @@ import { exportRouter } from "./export-router";
 import { importRouter } from "./import-router";
 import { currencyRouter } from "./currency-router";
 import { mfRouter } from "./mf-router";
+import { recurringRouter } from "./recurring-router";
+import { familyRouter } from "./family-router";
+import { expenseRouter } from "./expense-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -32,6 +35,9 @@ export const appRouter = createRouter({
   import: importRouter,
   currency: currencyRouter,
   mf: mfRouter,
+  recurring: recurringRouter,
+  family: familyRouter,
+  expense: expenseRouter,
 });
 
 export type AppRouter = typeof appRouter;

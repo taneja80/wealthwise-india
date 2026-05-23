@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
-import { Calculator, Info, Lightbulb, TrendingDown, ArrowRight } from "lucide-react";
+import { Calculator, Info, Lightbulb, TrendingDown, ArrowRight, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { Link } from "react-router";
 
 function TooltipLabel({ label, tip }: { label: string; tip: string }) {
   return (
@@ -343,6 +344,114 @@ export default function TaxPage() {
             </Card>
           </motion.div>
         </div>
+
+        {/* Tax-Saving Investment Recommendations */}
+        {calculation && calculation.unused80c > 0 && form.regime === "old" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+            <Card className="border-[#d4a843]/30 bg-gradient-to-r from-[#d4a843]/5 to-transparent">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4 text-[#d4a843]" />
+                  Recommended Tax-Saving Investments
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  You have {formatCurrency(calculation.unused80c)} unused 80C limit. Here&apos;s how to invest it:
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    {
+                      name: "ELSS Mutual Funds",
+                      section: "80C",
+                      returns: "10-15%",
+                      lockIn: "3 years",
+                      description: "Lowest lock-in among 80C options. Equity-linked, best for long-term wealth creation.",
+                      action: "Search ELSS",
+                      link: "/mf-search",
+                      highlight: true,
+                    },
+                    {
+                      name: "PPF (Public Provident Fund)",
+                      section: "80C",
+                      returns: "7.1%",
+                      lockIn: "15 years",
+                      description: "Tax-free returns (EEE status). Government-backed, zero risk. Max ₹1.5L/year.",
+                      action: null,
+                      link: null,
+                      highlight: false,
+                    },
+                    {
+                      name: "NPS (Tier-I)",
+                      section: "80CCD(1B)",
+                      returns: "8-12%",
+                      lockIn: "Till 60",
+                      description: "Extra ₹50K deduction over 80C. Market-linked returns with partial equity exposure.",
+                      action: null,
+                      link: null,
+                      highlight: !form.hasNps,
+                    },
+                    {
+                      name: "5-Year Tax Saver FD",
+                      section: "80C",
+                      returns: "6.5-7.5%",
+                      lockIn: "5 years",
+                      description: "Fixed returns, no market risk. Interest taxable. Good for conservative investors.",
+                      action: null,
+                      link: null,
+                      highlight: false,
+                    },
+                    {
+                      name: "SSY (Sukanya Samriddhi)",
+                      section: "80C",
+                      returns: "8.2%",
+                      lockIn: "21 years",
+                      description: "For girl child. EEE tax status. Highest among small savings. Max ₹1.5L/year.",
+                      action: null,
+                      link: null,
+                      highlight: false,
+                    },
+                    {
+                      name: "Health Insurance",
+                      section: "80D",
+                      returns: "Risk cover",
+                      lockIn: "Annual",
+                      description: form.hasHealthInsurance
+                        ? "You already have health insurance. Consider top-up plans for higher cover."
+                        : "Get ₹25K-₹50K deduction. Essential protection for your family.",
+                      action: null,
+                      link: null,
+                      highlight: !form.hasHealthInsurance,
+                    },
+                  ].map((inv) => (
+                    <div
+                      key={inv.name}
+                      className={`p-3 rounded-xl border ${inv.highlight ? "border-[#d4a843]/40 bg-[#d4a843]/5" : "border-border/30 bg-muted/30"}`}
+                    >
+                      <div className="flex items-start justify-between mb-1">
+                        <h4 className="text-sm font-semibold text-[#0f1a2e]">{inv.name}</h4>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{inv.section}</span>
+                      </div>
+                      <div className="flex gap-3 text-xs text-muted-foreground mb-2">
+                        <span>Returns: <strong className="text-emerald-600">{inv.returns}</strong></span>
+                        <span>Lock-in: <strong>{inv.lockIn}</strong></span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">{inv.description}</p>
+                      {inv.action && inv.link && (
+                        <Link to={inv.link}>
+                          <Button size="sm" variant="outline" className="w-full text-xs h-7">
+                            {inv.action}
+                            <ExternalLink className="w-3 h-3 ml-1" />
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
       </div>
     </TooltipProvider>
   );

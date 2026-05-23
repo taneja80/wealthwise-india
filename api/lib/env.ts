@@ -13,12 +13,9 @@ function optional(name: string): string {
 }
 
 export const env = {
-  appId: optional("APP_ID"),
-  appSecret: optional("APP_SECRET"),
   jwtSecret: required("JWT_SECRET"),
   isProduction: process.env.NODE_ENV === "production",
   databaseUrl: required("DATABASE_URL"),
-  kimiAuthUrl: optional("KIMI_AUTH_URL"),
-  kimiOpenUrl: optional("KIMI_OPEN_URL"),
-  ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  ollamaUrl: optional("OLLAMA_URL") || "http://localhost:11434",
+  ollamaModel: optional("OLLAMA_MODEL") || "llama3.2",
 };

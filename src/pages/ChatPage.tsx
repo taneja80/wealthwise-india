@@ -20,6 +20,9 @@ export default function ChatPage() {
     onSuccess: () => {
       utils.chat.getHistory.invalidate();
     },
+    onError: (err) => {
+      console.error("[chat] send failed:", err.message);
+    },
   });
 
   const utils = trpc.useUtils();

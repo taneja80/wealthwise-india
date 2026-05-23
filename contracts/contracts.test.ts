@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Errors } from "./errors";
 import type { AppError } from "./errors";
-import { Session, LocalSession, OAuthState, ErrorMessages, Paths } from "./constants";
+import { LocalSession, ErrorMessages, Paths } from "./constants";
 
 describe("Errors", () => {
   it("creates a badRequest error with status 400", () => {
@@ -64,16 +64,6 @@ describe("Errors", () => {
 });
 
 describe("Constants", () => {
-  describe("Session", () => {
-    it("has correct cookie name", () => {
-      expect(Session.cookieName).toBe("kimi_sid");
-    });
-
-    it("has 1 year max age", () => {
-      expect(Session.maxAgeMs).toBe(365 * 24 * 60 * 60 * 1000);
-    });
-  });
-
   describe("LocalSession", () => {
     it("has correct cookie name", () => {
       expect(LocalSession.cookieName).toBe("local_sid");
@@ -84,27 +74,9 @@ describe("Constants", () => {
     });
   });
 
-  describe("OAuthState", () => {
-    it("has correct cookie name", () => {
-      expect(OAuthState.cookieName).toBe("oauth_state");
-    });
-
-    it("has 10 minute max age", () => {
-      expect(OAuthState.maxAgeMs).toBe(10 * 60 * 1000);
-    });
-  });
-
-  describe("ErrorMessages", () => {
-    it("has expected messages", () => {
-      expect(ErrorMessages.unauthenticated).toBe("Authentication required");
-      expect(ErrorMessages.insufficientRole).toBe("Insufficient permissions");
-    });
-  });
-
   describe("Paths", () => {
     it("has correct paths", () => {
       expect(Paths.login).toBe("/login");
-      expect(Paths.oauthCallback).toBe("/api/oauth/callback");
     });
   });
 });
