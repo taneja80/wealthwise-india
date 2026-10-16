@@ -82,10 +82,8 @@ function applyRebate(tax: number, taxableIncome: number, rebateLimit: number): n
 
 /** Determine marginal slab rate for a given taxable income */
 function getMarginalRate(taxableIncome: number, slabs: typeof OLD_REGIME_SLABS): number {
-  let prevLimit = 0;
   for (const slab of slabs) {
     if (taxableIncome <= slab.limit) return slab.rate;
-    prevLimit = slab.limit;
   }
   return slabs[slabs.length - 1].rate;
 }

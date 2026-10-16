@@ -2,7 +2,6 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
-  users,
   localUsers,
   userProfiles,
   financialProfiles,
@@ -14,10 +13,13 @@ import {
   taxProfiles,
   retirementModels,
   chatMessages,
+  recurringTransactions,
+  familyMembers,
+  expenseBreakdown,
 } from "@db/schema";
 import { eq } from "drizzle-orm";
-import { LOCAL_USER_OFFSET } from "./context";
 import { enforceRateLimit, RateLimits } from "./lib/rate-limit";
+import { clearLocalAuthCookie } from "./local-auth-router";
 
 export const accountRouter = createRouter({
   /**
@@ -43,6 +45,9 @@ export const accountRouter = createRouter({
       await db.transaction(async (tx) => {
         // Delete all user data in dependency order
         await tx.delete(chatMessages).where(eq(chatMessages.userId, userId));
+        await tx.delete(expenseBreakdown).where(eq(expenseBreakdown.userId, userId));
+        await tx.delete(recurringTransactions).where(eq(recurringTransactions.userId, userId));
+        await tx.delete(familyMembers).where(eq(familyMembers.userId, userId));
         await tx.delete(assetProjections).where(eq(assetProjections.userId, userId));
         await tx.delete(investmentAllocations).where(eq(investmentAllocations.userId, userId));
         await tx.delete(assetHoldings).where(eq(assetHoldings.userId, userId));
@@ -52,15 +57,10 @@ export const accountRouter = createRouter({
         await tx.delete(retirementModels).where(eq(retirementModels.userId, userId));
         await tx.delete(financialProfiles).where(eq(financialProfiles.userId, userId));
         await tx.delete(userProfiles).where(eq(userProfiles.userId, userId));
-
-        // Delete the user record itself
-        if (ctx.user.source === "oauth") {
-          await tx.delete(users).where(eq(users.id, userId));
-        } else {
-          const realId = userId - LOCAL_USER_OFFSET;
-          await tx.delete(localUsers).where(eq(localUsers.id, realId));
-        }
+        await tx.delete(localUsers).where(eq(localUsers.id, userId));
       });
+
+      clearLocalAuthCookie(ctx.resHeaders, ctx.req.headers);
 
       return { success: true };
     }),

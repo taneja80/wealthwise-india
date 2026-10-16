@@ -26,7 +26,6 @@ import {
   Upload,
   FileText,
   CheckCircle2,
-  AlertCircle,
   Trash2,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";

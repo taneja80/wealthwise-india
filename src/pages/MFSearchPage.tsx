@@ -24,7 +24,6 @@ import {
   Plus,
   Check,
   GitCompareArrows,
-  X,
 } from "lucide-react";
 import {
   AreaChart,
@@ -35,7 +34,6 @@ import {
   Tooltip as ReTooltip,
   ResponsiveContainer,
 } from "recharts";
-import { formatNumber } from "@/lib/format";
 import { toast } from "sonner";
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -70,7 +68,7 @@ function ReturnBadge({ value }: { value: number | null }) {
 }
 
 export default function MFSearchPage() {
-  const { user } = useAuth({ redirectOnUnauthenticated: true });
+  useAuth({ redirectOnUnauthenticated: true });
   const [query, setQuery] = useState("");
   const [selectedScheme, setSelectedScheme] = useState<string | null>(null);
   const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set());
@@ -118,7 +116,8 @@ export default function MFSearchPage() {
 
   const handleAddToPortfolio = () => {
     if (!detail) return;
-    const nav = parseFloat(detail.latestNav);
+    const nav = Number(detail.latestNav);
+    if (!Number.isFinite(nav)) return;
     addHoldingMutation.mutate({
       assetClass: "equity",
       instrument: detail.schemeName,

@@ -887,7 +887,7 @@ export default function GoalsPage() {
         const requiredSIP = gt.requiredMonthlySIP;
         const currentSIP = Number(goal.monthlyContribution);
         const lumpsumNeeded = computeLumpsumNeeded(shortfall, alloc.expectedReturn, years);
-        const sipGapOnly = computeSIPForGap(shortfall, alloc.expectedReturn, years);
+        void computeSIPForGap(shortfall, alloc.expectedReturn, years);
         const Icon = categoryIcons[goal.category] || Target;
         const colorClass = categoryColors[goal.category] || categoryColors.other;
 

@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
 import { Calculator, TrendingUp, IndianRupee, Percent, Clock } from "lucide-react";
 import {
@@ -27,18 +26,6 @@ const FREQUENCY_CONFIG: Record<SipFrequency, { label: string; periodsPerYear: nu
   monthly: { label: "Monthly", periodsPerYear: 12 },
   quarterly: { label: "Quarterly", periodsPerYear: 4 },
 };
-
-function computeSIP(amount: number, rate: number, years: number, frequency: SipFrequency = "monthly") {
-  const ppy = FREQUENCY_CONFIG[frequency].periodsPerYear;
-  const n = years * ppy;
-  const r = rate / 100 / ppy;
-  if (r === 0) return amount * n;
-  return amount * ((Math.pow(1 + r, n) - 1) / r) * (1 + r);
-}
-
-function computeLumpsum(principal: number, rate: number, years: number) {
-  return principal * Math.pow(1 + rate / 100, years);
-}
 
 function generateChartData(
   sipAmount: number,

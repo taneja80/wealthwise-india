@@ -123,23 +123,7 @@ export function parseCASText(text: string): Array<{
     if (/^(scheme|fund|folio|name|instrument|asset)/i.test(line)) continue;
     if (/^[-=]+$/.test(line)) continue;
 
-    // Strategy 1: CSV/TSV with at least 2 columns
-    const csvCells = line.includes("\t") ? line.split("\t") : line.split(",");
-    if (csvCells.length >= 2) {
-      const name = csvCells[0].trim();
-      const valuePart = csvCells.length >= 2 ? csvCells[csvCells.length === 2 ? 1 : csvCells.length - 1].trim() : "";
-      const sipPart = csvCells.length >= 3 ? csvCells[2].trim() : "0";
-
-      const value = parseIndianNumber(valuePart);
-      const sip = parseIndianNumber(sipPart);
-
-      if (name.length > 2 && value > 0) {
-        results.push({ instrument: sanitizeName(name), currentValue: value, monthlySip: sip });
-        continue;
-      }
-    }
-
-    // Strategy 2: "Scheme Name - ₹1,23,456" or "Scheme Name  12345.67"
+    // Strategy 1: "Scheme Name - ₹1,23,456" or "Scheme Name - 12345.67"
     const dashMatch = line.match(/^(.+?)\s*[-–—]\s*₹?\s*([\d,]+(?:\.\d{1,2})?)/);
     if (dashMatch) {
       const value = parseIndianNumber(dashMatch[2]);
@@ -149,7 +133,7 @@ export function parseCASText(text: string): Array<{
       }
     }
 
-    // Strategy 3: CAS-style — scheme name followed by numbers (units, NAV, value)
+    // Strategy 2: CAS-style — scheme name followed by numbers (units, NAV, value)
     // "SBI Bluechip Fund - Growth    1234.567   45.6789   56,345.67"
     const casMatch = line.match(/^(.+?)\s{2,}([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/);
     if (casMatch) {
@@ -161,12 +145,35 @@ export function parseCASText(text: string): Array<{
       }
     }
 
-    // Strategy 4: Trailing number after a name
-    const trailingMatch = line.match(/^(.{3,}?)\s+(₹?\s*[\d,]+(?:\.\d{1,2})?)\s*$/);
-    if (trailingMatch) {
-      const value = parseIndianNumber(trailingMatch[2]);
-      if (value > 0) {
-        results.push({ instrument: sanitizeName(trailingMatch[1]), currentValue: value, monthlySip: 0 });
+    // Strategy 3: Trailing number after a name (single-value rows only);
+    // tab-delimited rows are handled by the CSV/TSV parser below.
+    if (!line.includes("\t")) {
+      const trailingMatch = line.match(/^(.{3,}?)\s+(₹?\s*[\d,]+(?:\.\d{1,2})?)\s*$/);
+      if (trailingMatch) {
+        const value = parseIndianNumber(trailingMatch[2]);
+        if (value > 0) {
+          results.push({ instrument: sanitizeName(trailingMatch[1]), currentValue: value, monthlySip: 0 });
+          continue;
+        }
+      }
+    }
+
+    // Strategy 4: CSV/TSV with at least 2 columns
+    // 2 cols: Name, Value | 3 cols: Name, Value, SIP | 4+ cols: Name, ..., Value
+    const csvCells = line.includes("\t") ? line.split("\t") : line.split(",");
+    if (csvCells.length >= 2) {
+      const name = csvCells[0].trim();
+      const valuePart =
+        csvCells.length === 2 || csvCells.length === 3
+          ? csvCells[1].trim()
+          : csvCells[csvCells.length - 1].trim();
+      const sipPart = csvCells.length === 3 ? csvCells[2].trim() : "0";
+
+      const value = parseIndianNumber(valuePart);
+      const sip = parseIndianNumber(sipPart);
+
+      if (name.length > 2 && value > 0 && /^[-+]?₹?\s*[\d,]+(?:\.\d+)?$/.test(valuePart) && /^[-+]?₹?\s*[\d,]+(?:\.\d+)?$/.test(sipPart)) {
+        results.push({ instrument: sanitizeName(name), currentValue: value, monthlySip: sip });
         continue;
       }
     }

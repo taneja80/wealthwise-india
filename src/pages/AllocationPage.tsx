@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
-import { RefreshCw, Target, TrendingUp, TrendingDown, AlertCircle, Info, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { RefreshCw, Target, TrendingUp, AlertCircle, Info, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { formatCurrency } from "@/lib/format";
 
@@ -91,10 +91,10 @@ export default function AllocationPage() {
     return acc;
   }, [] as Array<{ assetClass: string; recommendedAmount: number; allocationPercent: number; expectedReturn: number }>);
 
-  // Build current vs recommended comparison data
+  // Build current vs recommended comparison data (weighted by rupee recommendedAmount)
   const comparisonData = (() => {
     if (!aggregated || aggregated.length === 0 || !holdings || holdings.length === 0) return null;
-    const totalRecommended = aggregated.reduce((s, a) => s + a.allocationPercent, 0);
+    const totalRecommendedAmount = aggregated.reduce((s, a) => s + a.recommendedAmount, 0);
     const totalHoldingValue = holdings.reduce((s, h) => s + Number(h.currentValue), 0);
     if (totalHoldingValue === 0) return null;
 
@@ -106,7 +106,8 @@ export default function AllocationPage() {
     const allClasses = [...new Set([...aggregated.map((a) => a.assetClass), ...Object.keys(currentByClass)])];
     return allClasses.map((cls) => {
       const recItem = aggregated.find((a) => a.assetClass === cls);
-      const recommendedPct = recItem && totalRecommended > 0 ? (recItem.allocationPercent / totalRecommended) * 100 : 0;
+      const recommendedPct =
+        recItem && totalRecommendedAmount > 0 ? (recItem.recommendedAmount / totalRecommendedAmount) * 100 : 0;
       const currentPct = totalHoldingValue > 0 ? ((currentByClass[cls] ?? 0) / totalHoldingValue) * 100 : 0;
       const diff = currentPct - recommendedPct;
       const amountToMove = Math.round(Math.abs(diff / 100) * totalHoldingValue);
@@ -243,8 +244,8 @@ export default function AllocationPage() {
                   <CardContent>
                     <div className="space-y-3">
                       {aggregated?.map((item, i) => {
-                        const total = aggregated.reduce((s, a) => s + a.allocationPercent, 0);
-                        const percent = total > 0 ? (item.allocationPercent / total) * 100 : 0;
+                        const totalAmount = aggregated.reduce((s, a) => s + a.recommendedAmount, 0);
+                        const percent = totalAmount > 0 ? (item.recommendedAmount / totalAmount) * 100 : 0;
                         return (
                           <Tooltip key={item.assetClass}>
                             <TooltipTrigger asChild>
@@ -325,7 +326,12 @@ export default function AllocationPage() {
                           <XAxis dataKey="shortName" tick={{ fontSize: 11 }} />
                           <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
                           <ReTooltip
-                            formatter={(value: number, name: string) => [`${value}%`, name === "current" ? "Current" : "Recommended"]}
+                            formatter={(value: string | number | readonly (string | number)[] | undefined, name: string | number | undefined) => {
+                              const nextValue = Array.isArray(value) ? value[0] : value;
+                              const numeric = typeof nextValue === "number" ? nextValue : Number(nextValue ?? 0);
+                              const label = name === "current" ? "Current" : "Recommended";
+                              return [`${numeric}%`, label];
+                            }}
                           />
                           <Bar dataKey="current" name="Current" fill="#6366f1" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="recommended" name="Recommended" fill="#d4a843" radius={[4, 4, 0, 0]} />

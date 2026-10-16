@@ -65,7 +65,7 @@ function timeAgo(timestamp: number): string {
 }
 
 export default function Dashboard() {
-  const { user, isLoading: authLoading, logout } = useAuth({ redirectOnUnauthenticated: true });
+  const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
   const { data: userProfile } = trpc.profile.getUserProfile.useQuery(undefined, { enabled: !!user });
   const { data: financialProfile, dataUpdatedAt: fpUpdatedAt } = trpc.profile.getFinancialProfile.useQuery(undefined, { enabled: !!user });
   const { data: goals } = trpc.goals.list.useQuery(undefined, { enabled: !!user });
@@ -379,14 +379,18 @@ export default function Dashboard() {
                         paddingAngle={3}
                         dataKey="value"
                         nameKey="name"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent = 0 }) => `${name} ${(percent * 100).toFixed(0)}%`}
                       >
                         {allocationData.map((entry, i) => (
                           <Cell key={i} fill={entry.color} />
                         ))}
                       </Pie>
                       <ReTooltip
-                        formatter={(value: number) => [`₹${value.toLocaleString("en-IN")}`, "Value"]}
+                        formatter={(value: number | string | readonly (number | string)[] | undefined) => {
+                          const nextValue = Array.isArray(value) ? value[0] : value;
+                          const numeric = typeof nextValue === "number" ? nextValue : Number(nextValue ?? 0);
+                          return [`₹${numeric.toLocaleString("en-IN")}`, "Value"];
+                        }}
                       />
                       <Legend />
                     </RechartsPie>

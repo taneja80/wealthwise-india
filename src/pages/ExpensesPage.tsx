@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
-import { PieChart, Wallet, Save, TrendingDown, BarChart3 } from "lucide-react";
+import { PieChart, Save, TrendingDown, BarChart3 } from "lucide-react";
 import {
   PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -189,12 +189,16 @@ export default function ExpensesPage() {
                         paddingAngle={2}
                         dataKey="value"
                       >
-                        {pieData.map((d, i) => (
+                        {pieData.map((d) => (
                           <Cell key={d.name} fill={d.color} />
                         ))}
                       </Pie>
                       <ReTooltip
-                        formatter={(v: number, name: string) => [formatCurrency(v), name]}
+                        formatter={(value: string | number | readonly (string | number)[] | undefined, name: string | number | undefined) => {
+                          const nextValue = Array.isArray(value) ? value[0] : value;
+                          const numeric = typeof nextValue === "number" ? nextValue : Number(nextValue ?? 0);
+                          return [formatCurrency(numeric), String(name ?? "Total")];
+                        }}
                       />
                       <Legend
                         formatter={(value: string) => <span className="text-xs">{value}</span>}
@@ -229,7 +233,11 @@ export default function ExpensesPage() {
                         }}
                       />
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCompact(v)} />
-                      <ReTooltip formatter={(v: number) => [formatCurrency(v), "Total"]} />
+                      <ReTooltip formatter={(value: string | number | readonly (string | number)[] | undefined) => {
+                        const nextValue = Array.isArray(value) ? value[0] : value;
+                        const numeric = typeof nextValue === "number" ? nextValue : Number(nextValue ?? 0);
+                        return [formatCurrency(numeric), "Total"];
+                      }} />
                       <Bar dataKey="total" fill="#d4a843" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>

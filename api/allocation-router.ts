@@ -138,17 +138,20 @@ export const allocationRouter = createRouter({
         );
 
         for (const alloc of allocations) {
-          const result = await tx.insert(investmentAllocations).values({
-            userId: ctx.user.id,
-            goalId: goal.id,
-            assetClass: alloc.assetClass as any,
-            allocationPercent: String(alloc.allocationPercent),
-            recommendedAmount: String(alloc.recommendedAmount),
-            expectedReturn: String(alloc.expectedReturn),
-            riskLevel: alloc.riskLevel as any,
-          });
+          const [inserted] = await tx
+            .insert(investmentAllocations)
+            .values({
+              userId: ctx.user.id,
+              goalId: goal.id,
+              assetClass: alloc.assetClass as any,
+              allocationPercent: String(alloc.allocationPercent),
+              recommendedAmount: String(alloc.recommendedAmount),
+              expectedReturn: String(alloc.expectedReturn),
+              riskLevel: alloc.riskLevel as any,
+            })
+            .returning({ id: investmentAllocations.id });
           allAllocations.push({
-            id: Number((result as any).insertId),
+            id: inserted.id,
             goalId: goal.id,
             goalName: goal.name,
             ...alloc,

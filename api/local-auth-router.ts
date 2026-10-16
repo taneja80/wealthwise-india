@@ -45,7 +45,7 @@ function setLocalAuthCookie(resHeaders: Headers, reqHeaders: Headers, token: str
   );
 }
 
-function clearLocalAuthCookie(resHeaders: Headers, reqHeaders: Headers) {
+export function clearLocalAuthCookie(resHeaders: Headers, reqHeaders: Headers) {
   const opts = getSessionCookieOptions(reqHeaders);
   resHeaders.append(
     "set-cookie",
@@ -82,14 +82,17 @@ export const localAuthRouter = createRouter({
       }
       const passwordHash = await bcrypt.hash(input.password, 12);
       const securityAnswerHash = await bcrypt.hash(input.securityAnswer.toLowerCase().trim(), 10);
-      const result = await db.insert(localUsers).values({
-        email: input.email,
-        passwordHash,
-        name: input.name || input.email.split("@")[0],
-        securityQuestion: input.securityQuestion,
-        securityAnswerHash,
-      });
-      const userId = Number((result as any).insertId);
+      const [inserted] = await db
+        .insert(localUsers)
+        .values({
+          email: input.email,
+          passwordHash,
+          name: input.name || input.email.split("@")[0],
+          securityQuestion: input.securityQuestion,
+          securityAnswerHash,
+        })
+        .returning({ id: localUsers.id });
+      const userId = inserted.id;
       const token = await createToken(userId, input.email, "user");
       setLocalAuthCookie(ctx.resHeaders, ctx.req.headers, token);
       return { success: true, user: { id: userId, email: input.email, name: input.name || input.email.split("@")[0] } };

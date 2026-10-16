@@ -44,6 +44,7 @@ import {
   Legend,
   ScatterChart,
   Scatter,
+  Cell,
 } from "recharts";
 import { formatCurrency, formatCompact } from "@/lib/format";
 
@@ -476,7 +477,7 @@ export default function AssetPage() {
                       <ReTooltip formatter={(value: any, name: any) => [`${value}%`, name]} />
                       <Scatter data={frontier ?? []} fill="#d4a843">
                         {(frontier ?? []).map((entry: any, index: number) => (
-                          <circle key={index} r={8} fill={entry.risk === "high" ? "#ef4444" : entry.risk === "medium" ? "#d4a843" : "#10b981"} />
+                          <Cell key={index} fill={entry.risk === "high" ? "#ef4444" : entry.risk === "medium" ? "#d4a843" : "#10b981"} />
                         ))}
                       </Scatter>
                     </ScatterChart>

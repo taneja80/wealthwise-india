@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery, authedQuery } from "./middleware";
+import { createRouter, publicQuery } from "./middleware";
 
 // ---- Hardcoded base rates (INR per 1 unit of foreign currency) ----
 // These serve as fallback when the API is unreachable.
@@ -70,7 +70,7 @@ async function getINRRates(): Promise<Record<string, number>> {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) throw new Error(`API returned ${res.status}`);
-    const data = await res.json();
+    const data = (await res.json()) as { result?: string; rates?: Record<string, number> };
 
     if (data?.result === "success" && data.rates) {
       // data.rates are "1 INR = X foreign", we want "1 foreign = X INR"

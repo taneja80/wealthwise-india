@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { goals, assetHoldings, financialProfiles } from "@db/schema";
-import { eq, and, inArray, notInArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { safeDecimal } from "./lib/validation";
 
 const LIQUID_ASSET_CLASSES = ["equity", "debt", "liquid", "international"] as const;
@@ -86,19 +86,22 @@ export const goalsRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      const result = await db.insert(goals).values({
-        name: input.name,
-        category: input.category,
-        targetAmount: String(input.targetAmount),
-        currentAmount: String(input.currentAmount),
-        timelineYears: input.timelineYears,
-        priority: input.priority,
-        description: input.description,
-        monthlyContribution: String(input.monthlyContribution),
-        expectedReturn: String(input.expectedReturn),
-        userId: ctx.user.id,
-      });
-      return { success: true, id: Number((result as any).insertId) };
+      const [inserted] = await db
+        .insert(goals)
+        .values({
+          name: input.name,
+          category: input.category,
+          targetAmount: String(input.targetAmount),
+          currentAmount: String(input.currentAmount),
+          timelineYears: input.timelineYears,
+          priority: input.priority,
+          description: input.description,
+          monthlyContribution: String(input.monthlyContribution),
+          expectedReturn: String(input.expectedReturn),
+          userId: ctx.user.id,
+        })
+        .returning({ id: goals.id });
+      return { success: true, id: inserted.id };
     }),
 
   update: authedQuery

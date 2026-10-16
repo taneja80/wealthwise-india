@@ -61,7 +61,7 @@ export const chatRouter = createRouter({
       z.object({
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      }).default({}),
+      }).default({ limit: 50, offset: 0 }),
     )
     .query(async ({ ctx, input }) => {
       const db = getDb();
@@ -94,16 +94,16 @@ export const chatRouter = createRouter({
       enforceRateLimit(ctx, "chat", RateLimits.chat);
 
       const db = getDb();
-      await db.insert(chatMessages).values({
-        userId: ctx.user.id,
-        role: "user",
-        content: input.message,
-      });
-
       const history = await db.query.chatMessages.findMany({
         where: eq(chatMessages.userId, ctx.user.id),
         orderBy: (chatMessages, { desc }) => [desc(chatMessages.createdAt)],
         limit: 10,
+      });
+
+      await db.insert(chatMessages).values({
+        userId: ctx.user.id,
+        role: "user",
+        content: input.message,
       });
 
       // Fetch user's financial data for context-aware advice

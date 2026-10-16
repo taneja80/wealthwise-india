@@ -8,6 +8,7 @@ import {
   integer,
   decimal,
   boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 // ---- Enums ----
@@ -148,7 +149,7 @@ export const cashFlowProjections = pgTable("cash_flow_projections", {
   savings: decimal("savings", { precision: 15, scale: 2 }).notNull(),
   investments: decimal("investments", { precision: 15, scale: 2 }).notNull(),
   netWorth: decimal("netWorth", { precision: 15, scale: 2 }).notNull(),
-  goalContributions: text("goalContributions").$type<Record<string, number>>(),
+  goalContributions: jsonb("goalContributions").$type<Record<string, number>>(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
 });
 

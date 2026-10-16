@@ -97,27 +97,35 @@ export const recurringRouter = createRouter({
       }> = [];
 
       for (let d = 0; d < days; d++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + d);
+        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + d);
+        const year = date.getFullYear();
+        const month = date.getMonth();
         const dayOfMonth = date.getDate();
-        const dateStr = date.toISOString().slice(0, 10);
+        const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+        const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
 
         for (const txn of txns) {
           // Check if end date passed
           if (txn.endDate && dateStr > txn.endDate) continue;
           if (dateStr < txn.startDate) continue;
 
+          const [startY, startM, startD] = txn.startDate.split("-").map(Number);
+          const startDateLocal = new Date(startY, (startM || 1) - 1, startD || 1);
+          const effectiveDueDay = Math.min(txn.dueDay, lastDayOfMonth);
+
           let matches = false;
-          if (txn.frequency === "weekly" && date.getDay() === new Date(txn.startDate).getDay()) {
+          if (txn.frequency === "weekly" && date.getDay() === startDateLocal.getDay()) {
             matches = true;
-          } else if (txn.frequency === "monthly" && dayOfMonth === txn.dueDay) {
+          } else if (txn.frequency === "monthly" && dayOfMonth === effectiveDueDay) {
             matches = true;
-          } else if (txn.frequency === "quarterly" && dayOfMonth === txn.dueDay) {
-            const monthsDiff = (date.getFullYear() - new Date(txn.startDate).getFullYear()) * 12 +
-              date.getMonth() - new Date(txn.startDate).getMonth();
-            if (monthsDiff % 3 === 0) matches = true;
-          } else if (txn.frequency === "yearly" && dayOfMonth === txn.dueDay &&
-            date.getMonth() === new Date(txn.startDate).getMonth()) {
+          } else if (txn.frequency === "quarterly" && dayOfMonth === effectiveDueDay) {
+            const monthsDiff = (year - startDateLocal.getFullYear()) * 12 + (month - startDateLocal.getMonth());
+            if (monthsDiff >= 0 && monthsDiff % 3 === 0) matches = true;
+          } else if (
+            txn.frequency === "yearly" &&
+            dayOfMonth === effectiveDueDay &&
+            month === startDateLocal.getMonth()
+          ) {
             matches = true;
           }
 

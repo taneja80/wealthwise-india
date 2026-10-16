@@ -8,7 +8,6 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
 import {
   GitCompareArrows,
@@ -16,15 +15,14 @@ import {
   Trash2,
   Copy,
   TrendingUp,
-  TrendingDown,
   IndianRupee,
   Percent,
   Clock,
   ArrowUpRight,
   ArrowDownRight,
-  Minus,
   RotateCcw,
 } from "lucide-react";
+import { formatCompact } from "@/lib/format";
 import {
   LineChart,
   Line,
@@ -35,7 +33,6 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { formatCurrency, formatCompact, formatPercent } from "@/lib/format";
 
 // ---- Scenario engine ----
 
@@ -239,7 +236,7 @@ function ScenarioPanel({
   onRemove,
   onDuplicate,
   canRemove,
-  index,
+  index: _index,
 }: {
   params: ScenarioParams;
   onChange: (p: ScenarioParams) => void;

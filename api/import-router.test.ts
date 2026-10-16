@@ -129,23 +129,22 @@ describe("sanitizeName", () => {
 });
 
 describe("parseCASText", () => {
-  it("parses CSV format (last column is value for 3+ cols)", () => {
-    // Parser takes last column as value, 3rd column as SIP
+  it("parses 3-column CSV format (Name, Value, SIP)", () => {
     const text = `SBI Bluechip Fund,500000,10000
 HDFC Liquid Fund,200000,5000`;
     const result = parseCASText(text);
     expect(result).toHaveLength(2);
     expect(result[0].instrument).toBe("SBI Bluechip Fund");
-    expect(result[0].currentValue).toBe(10000);
+    expect(result[0].currentValue).toBe(500000);
     expect(result[0].monthlySip).toBe(10000);
   });
 
-  it("parses TSV format (last column is value for 3+ cols)", () => {
+  it("parses 3-column TSV format (Name, Value, SIP)", () => {
     const text = `ICICI Value Fund\t300000\t5000`;
     const result = parseCASText(text);
     expect(result).toHaveLength(1);
     expect(result[0].instrument).toBe("ICICI Value Fund");
-    expect(result[0].currentValue).toBe(5000);
+    expect(result[0].currentValue).toBe(300000);
     expect(result[0].monthlySip).toBe(5000);
   });
 
@@ -178,12 +177,12 @@ My Good Fund,100000,5000`;
 
   it("skips separator lines", () => {
     const text = `--------
-SBI Fund,0,100000
+SBI Fund,100000,5000
 ========`;
-    // Separators skipped, and "SBI Fund" has value 100000 (last col)
     const result = parseCASText(text);
     expect(result).toHaveLength(1);
     expect(result[0].currentValue).toBe(100000);
+    expect(result[0].monthlySip).toBe(5000);
   });
 
   it("handles empty input", () => {

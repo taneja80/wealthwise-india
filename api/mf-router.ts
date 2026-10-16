@@ -192,9 +192,14 @@ export const mfRouter = createRouter({
         return null;
       }
 
-      // detail.meta has fund info, detail.data has NAV history
-      const meta = detail.meta ?? {};
-      const navHistory: Array<{ date: string; nav: string }> = (detail.data ?? []).slice(0, 365);
+      // The mfapi.in payload is a plain object: { meta: { ... }, data: [ ... ] }
+      const meta = (detail as { meta?: Record<string, string> } | null)?.meta ?? {};
+      const navHistory: Array<{ date: string; nav: string }> = ((detail as { data?: Array<{ date?: string; nav?: string }> } | null)?.data ?? [])
+        .map((entry) => ({
+          date: String(entry.date ?? ""),
+          nav: String(entry.nav ?? "0"),
+        }))
+        .slice(0, 400);
 
       // Calculate basic performance metrics from NAV history
       const latestNav = navHistory.length > 0 ? parseFloat(navHistory[0].nav) : 0;
@@ -238,13 +243,43 @@ export const mfRouter = createRouter({
   }),
 });
 
+function parseMfApiDate(dateStr: string): number | null {
+  // mfapi.in format: DD-MM-YYYY
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return null;
+  const [dd, mm, yyyy] = parts.map(Number);
+  if (!dd || !mm || !yyyy) return null;
+  return Date.UTC(yyyy, mm - 1, dd);
+}
+
 function calcReturn(
   navHistory: Array<{ date: string; nav: string }>,
   days: number,
   latestNav: number,
 ): number | null {
-  if (navHistory.length < days || latestNav <= 0) return null;
-  const pastNav = parseFloat(navHistory[Math.min(days, navHistory.length - 1)]?.nav ?? "0");
+  if (navHistory.length < 2 || latestNav <= 0) return null;
+
+  if (days === 1) {
+    const prevNav = parseFloat(navHistory[1]?.nav ?? "0");
+    return prevNav > 0 ? Math.round(((latestNav - prevNav) / prevNav) * 10000) / 100 : null;
+  }
+
+  const latestTs = parseMfApiDate(navHistory[0]?.date ?? "");
+  if (latestTs) {
+    const targetTs = latestTs - days * 24 * 60 * 60 * 1000;
+    const match = navHistory.find((entry) => {
+      const ts = parseMfApiDate(entry.date);
+      return ts !== null && ts <= targetTs;
+    });
+    if (!match) return null;
+    const pastNav = parseFloat(match.nav);
+    return pastNav > 0 ? Math.round(((latestNav - pastNav) / pastNav) * 10000) / 100 : null;
+  }
+
+  // Fallback to approximate trading days if dates are not DD-MM-YYYY
+  const tradingDays = Math.max(1, Math.round((days * 252) / 365));
+  if (navHistory.length <= tradingDays) return null;
+  const pastNav = parseFloat(navHistory[tradingDays]?.nav ?? "0");
   if (pastNav <= 0) return null;
   return Math.round(((latestNav - pastNav) / pastNav) * 10000) / 100;
 }

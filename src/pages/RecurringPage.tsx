@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
-import { CalendarClock, Plus, Trash2, IndianRupee, CreditCard, Repeat, Wallet } from "lucide-react";
+import { CalendarClock, Plus, Trash2, CreditCard, Repeat, Wallet } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
 
