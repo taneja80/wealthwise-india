@@ -149,6 +149,7 @@ export const cashFlowProjections = pgTable("cash_flow_projections", {
   savings: decimal("savings", { precision: 15, scale: 2 }).notNull(),
   investments: decimal("investments", { precision: 15, scale: 2 }).notNull(),
   netWorth: decimal("netWorth", { precision: 15, scale: 2 }).notNull(),
+  // Per-year contribution per goal, keyed by goal id (goal names are not unique).
   goalContributions: jsonb("goalContributions").$type<Record<string, number>>(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
 });

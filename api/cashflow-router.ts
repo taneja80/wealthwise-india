@@ -3,7 +3,7 @@ import { getDb } from "./queries/connection";
 import { cashFlowProjections, goals, financialProfiles, userProfiles, retirementModels } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-function calculateCashFlows(
+export function calculateCashFlows(
   age: number,
   monthlyIncome: number,
   monthlyExpenses: number,
@@ -11,7 +11,7 @@ function calculateCashFlows(
   totalLiabilities: number,
   planningHorizon: number,
   inflationScenario: string,
-  goalList: Array<{ targetAmount: number; currentAmount: number; timelineYears: number; monthlyContribution: number; expectedReturn: number; name: string }>,
+  goalList: Array<{ id: number; targetAmount: number; currentAmount: number; timelineYears: number; monthlyContribution: number; expectedReturn: number; name: string }>,
   retirementAge: number = 60,
 ) {
   const inflationRates: Record<string, number> = {
@@ -23,8 +23,8 @@ function calculateCashFlows(
   const incomeGrowth = 0.05;
   const projections = [];
   let currentNetWorth = totalAssets - totalLiabilities;
-  let currentIncome = monthlyIncome * 12;
-  let currentExpenses = monthlyExpenses * 12;
+  const currentIncome = monthlyIncome * 12;
+  const currentExpenses = monthlyExpenses * 12;
 
   for (let year = 1; year <= planningHorizon; year++) {
     const currentAge = age + year;
@@ -43,7 +43,9 @@ function calculateCashFlows(
       if (year <= goal.timelineYears) {
         const contribution = goal.monthlyContribution * 12;
         totalGoalContribution += contribution;
-        goalContributions[goal.name] = contribution;
+        // Key by goal id: names are user-entered and not unique, so
+        // same-named goals would silently overwrite each other.
+        goalContributions[String(goal.id)] = contribution;
       }
     }
 
@@ -97,6 +99,7 @@ export const cashFlowRouter = createRouter({
     const inflationScenario = profile.inflationScenario ?? "moderate";
 
     const formattedGoals = goalList.map((g) => ({
+      id: g.id,
       targetAmount: Number(g.targetAmount),
       currentAmount: Number(g.currentAmount),
       timelineYears: g.timelineYears,
