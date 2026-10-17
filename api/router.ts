@@ -16,6 +16,7 @@ import { mfRouter } from "./mf-router";
 import { recurringRouter } from "./recurring-router";
 import { familyRouter } from "./family-router";
 import { expenseRouter } from "./expense-router";
+import { netWorthRouter } from "./networth-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -38,6 +39,7 @@ export const appRouter = createRouter({
   recurring: recurringRouter,
   family: familyRouter,
   expense: expenseRouter,
+  netWorth: netWorthRouter,
 });
 
 export type AppRouter = typeof appRouter;

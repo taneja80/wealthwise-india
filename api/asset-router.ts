@@ -5,6 +5,14 @@ import { assetHoldings, assetProjections, financialProfiles, userProfiles } from
 import { eq } from "drizzle-orm";
 import { safeDecimal } from "./lib/validation";
 import { fetchAMFIData } from "./mf-router";
+import { convertToINR, fetchQuote, searchSymbols } from "./lib/stock-prices";
+import { getINRRates } from "./currency-router";
+
+const ASSET_CLASS_VALUES = ["equity", "debt", "gold", "real_estate", "liquid", "international"] as const;
+
+type AssetClass = (typeof ASSET_CLASS_VALUES)[number];
+
+const isAssetClass = (value: string): value is AssetClass => ASSET_CLASS_VALUES.includes(value as AssetClass);
 
 // Asset class parameters for CAPM/Mean-Variance Optimization
 // Returns are post-tax, inflation-adjusted real returns
@@ -168,6 +176,99 @@ function generateEfficientFrontier(assetClasses: string[]) {
   return points;
 }
 
+type Db = ReturnType<typeof getDb>;
+
+/**
+ * Refresh NAV for all of a user's holdings that have a schemeCode + units.
+ * Shared by the refreshAllNAV endpoint and the net-worth snapshot pipeline.
+ */
+export async function refreshAllNavValues(db: Db, userId: number) {
+  const userHoldings = await db.query.assetHoldings.findMany({
+    where: eq(assetHoldings.userId, userId),
+  });
+  const mfHoldings = userHoldings.filter(
+    (h) => h.schemeCode && h.units && parseFloat(String(h.units)) > 0,
+  );
+  if (mfHoldings.length === 0) {
+    return { updated: 0, skipped: 0, errors: [] as string[] };
+  }
+  const schemes = await fetchAMFIData();
+  const schemeMap = new Map(schemes.map((s) => [s.schemeCode, s]));
+
+  let updated = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  await db.transaction(async (tx) => {
+    for (const h of mfHoldings) {
+      const scheme = schemeMap.get(h.schemeCode!);
+      if (!scheme) {
+        skipped++;
+        continue;
+      }
+      const nav = parseFloat(scheme.nav);
+      if (isNaN(nav) || nav <= 0) {
+        errors.push(`${h.instrument}: invalid NAV`);
+        continue;
+      }
+      const units = parseFloat(String(h.units));
+      const newValue = nav * units;
+      await tx.update(assetHoldings).set({
+        currentValue: String(newValue.toFixed(2)),
+        navDate: scheme.date,
+      }).where(eq(assetHoldings.id, h.id));
+      updated++;
+    }
+  });
+
+  return { updated, skipped, errors };
+}
+
+/**
+ * Refresh live market prices for all of a user's holdings with a ticker + units.
+ * Shared by the refreshPrices endpoint and the net-worth snapshot pipeline.
+ */
+export async function refreshLivePrices(db: Db, userId: number) {
+  const userHoldings = await db.query.assetHoldings.findMany({
+    where: eq(assetHoldings.userId, userId),
+  });
+  const priced = userHoldings.filter(
+    (h) => h.ticker && h.units && Number(h.units) > 0,
+  );
+  if (priced.length === 0) {
+    return { updated: 0, errors: [] as string[] };
+  }
+
+  const inrRates = await getINRRates();
+  let updated = 0;
+  const errors: string[] = [];
+
+  for (const h of priced) {
+    const quote = await fetchQuote(h.ticker!);
+    if (!quote) {
+      errors.push(`${h.instrument}: no quote for ${h.ticker}`);
+      continue;
+    }
+    const priceInr = quote.currency.toUpperCase() === "INR"
+      ? quote.price
+      : convertToINR(quote.price, quote.currency, inrRates);
+    if (priceInr === null) {
+      errors.push(`${h.instrument}: cannot convert ${quote.currency}`);
+      continue;
+    }
+    const newValue = priceInr * Number(h.units);
+    await db.update(assetHoldings).set({
+      currentValue: String(newValue.toFixed(2)),
+      lastPrice: String(quote.price),
+      priceCurrency: quote.currency,
+      priceDate: quote.asOf.slice(0, 10),
+    }).where(eq(assetHoldings.id, h.id));
+    updated++;
+  }
+
+  return { updated, errors };
+}
+
 export const assetRouter = createRouter({
   listHoldings: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
@@ -192,6 +293,7 @@ export const assetRouter = createRouter({
         ]).default("equity_ltcg"),
         schemeCode: z.string().max(20).optional(),
         units: safeDecimal({ min: 0 }).optional(),
+        ticker: z.string().max(40).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -207,6 +309,7 @@ export const assetRouter = createRouter({
         taxTreatment: input.taxTreatment,
         schemeCode: input.schemeCode ?? null,
         units: input.units != null ? String(input.units) : null,
+        ticker: input.ticker ?? null,
       });
       return { success: true };
     }),
@@ -221,6 +324,7 @@ export const assetRouter = createRouter({
         expectedReturn: safeDecimal({ min: 0, max: 100 }).optional(),
         schemeCode: z.string().max(20).nullable().optional(),
         units: safeDecimal({ min: 0 }).nullable().optional(),
+        ticker: z.string().max(40).nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -238,6 +342,7 @@ export const assetRouter = createRouter({
       if (input.expectedReturn !== undefined) updates.expectedReturn = String(input.expectedReturn);
       if (input.schemeCode !== undefined) updates.schemeCode = input.schemeCode;
       if (input.units !== undefined) updates.units = input.units != null ? String(input.units) : null;
+      if (input.ticker !== undefined) updates.ticker = input.ticker;
       await db.update(assetHoldings).set(updates).where(eq(assetHoldings.id, input.id));
       return { success: true };
     }),
@@ -282,46 +387,67 @@ export const assetRouter = createRouter({
    * Single AMFI fetch, then update all matching holdings in a transaction.
    */
   refreshAllNAV: authedQuery.mutation(async ({ ctx }) => {
-    const db = getDb();
-    const userHoldings = await db.query.assetHoldings.findMany({
-      where: eq(assetHoldings.userId, ctx.user.id),
-    });
-    const mfHoldings = userHoldings.filter(
-      (h) => h.schemeCode && h.units && parseFloat(String(h.units)) > 0,
-    );
-    if (mfHoldings.length === 0) {
-      return { updated: 0, skipped: 0, errors: [] };
-    }
-    const schemes = await fetchAMFIData();
-    const schemeMap = new Map(schemes.map((s) => [s.schemeCode, s]));
+    return refreshAllNavValues(getDb(), ctx.user.id);
+  }),
 
-    let updated = 0;
-    let skipped = 0;
-    const errors: string[] = [];
+  /** Search exchange-traded tickers (stocks/ETFs) by name or symbol. */
+  searchTicker: authedQuery
+    .input(z.object({ query: z.string().min(2).max(60) }))
+    .query(async ({ input }) => {
+      return searchSymbols(input.query);
+    }),
 
-    await db.transaction(async (tx) => {
-      for (const h of mfHoldings) {
-        const scheme = schemeMap.get(h.schemeCode!);
-        if (!scheme) {
-          skipped++;
-          continue;
-        }
-        const nav = parseFloat(scheme.nav);
-        if (isNaN(nav) || nav <= 0) {
-          errors.push(`${h.instrument}: invalid NAV`);
-          continue;
-        }
-        const units = parseFloat(String(h.units));
-        const newValue = nav * units;
-        await tx.update(assetHoldings).set({
-          currentValue: String(newValue.toFixed(2)),
-          navDate: scheme.date,
-        }).where(eq(assetHoldings.id, h.id));
-        updated++;
+  /**
+   * Refresh a single holding from its live market price (ticker + units).
+   * Non-INR quotes are converted to INR at the current exchange rate.
+   */
+  refreshPrice: authedQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const holding = await db.query.assetHoldings.findFirst({
+        where: eq(assetHoldings.id, input.id),
+      });
+      if (!holding || holding.userId !== ctx.user.id) {
+        throw new Error("Holding not found");
       }
-    });
+      if (!holding.ticker || !holding.units || Number(holding.units) <= 0) {
+        throw new Error("This holding has no ticker or units — cannot refresh live price");
+      }
+      const quote = await fetchQuote(holding.ticker);
+      if (!quote) {
+        throw new Error(`No live price found for ticker ${holding.ticker}`);
+      }
+      const inrRates = quote.currency.toUpperCase() === "INR" ? { INR: 1 } : await getINRRates();
+      const priceInr = quote.currency.toUpperCase() === "INR"
+        ? quote.price
+        : convertToINR(quote.price, quote.currency, inrRates);
+      if (priceInr === null) {
+        throw new Error(`Cannot convert ${quote.currency} to INR`);
+      }
+      const newValue = priceInr * Number(holding.units);
+      await db.update(assetHoldings).set({
+        currentValue: String(newValue.toFixed(2)),
+        lastPrice: String(quote.price),
+        priceCurrency: quote.currency,
+        priceDate: quote.asOf.slice(0, 10),
+      }).where(eq(assetHoldings.id, input.id));
+      return {
+        success: true,
+        price: quote.price,
+        currency: quote.currency,
+        priceInr: Math.round(priceInr * 100) / 100,
+        priceDate: quote.asOf.slice(0, 10),
+        newValue: Math.round(newValue),
+      };
+    }),
 
-    return { updated, skipped, errors };
+  /**
+   * Refresh live prices for all of the user's holdings that have a ticker + units.
+   * Fetches FX rates once, then walks tickers sequentially (polite to the API).
+   */
+  refreshPrices: authedQuery.mutation(async ({ ctx }) => {
+    return refreshLivePrices(getDb(), ctx.user.id);
   }),
 
   deleteHolding: authedQuery
@@ -480,10 +606,11 @@ export const assetRouter = createRouter({
     await db.transaction(async (tx) => {
       await tx.delete(assetProjections).where(eq(assetProjections.userId, ctx.user.id));
       for (const p of projections) {
+        const assetClass = isAssetClass(p.assetClass) ? p.assetClass : "equity";
         await tx.insert(assetProjections).values({
           userId: ctx.user.id,
           year: p.year,
-          assetClass: p.assetClass as any,
+          assetClass,
           projectedValue: String(p.projectedValue),
           contributions: String(p.contributions),
           returns: String(p.returns),

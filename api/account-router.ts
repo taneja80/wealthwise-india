@@ -16,6 +16,7 @@ import {
   recurringTransactions,
   familyMembers,
   expenseBreakdown,
+  netWorthSnapshots,
 } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { enforceRateLimit, RateLimits } from "./lib/rate-limit";
@@ -45,6 +46,7 @@ export const accountRouter = createRouter({
       await db.transaction(async (tx) => {
         // Delete all user data in dependency order
         await tx.delete(chatMessages).where(eq(chatMessages.userId, userId));
+        await tx.delete(netWorthSnapshots).where(eq(netWorthSnapshots.userId, userId));
         await tx.delete(expenseBreakdown).where(eq(expenseBreakdown.userId, userId));
         await tx.delete(recurringTransactions).where(eq(recurringTransactions.userId, userId));
         await tx.delete(familyMembers).where(eq(familyMembers.userId, userId));

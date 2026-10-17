@@ -8,6 +8,20 @@
       "when": 1792165865205,
       "tag": "0000_windy_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792249925102,
+      "tag": "0001_net_worth_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792250494393,
+      "tag": "0002_live_prices",
+      "breakpoints": true
     }
   ]
 }

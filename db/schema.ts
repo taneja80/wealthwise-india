@@ -9,6 +9,7 @@ import {
   decimal,
   boolean,
   jsonb,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ---- Enums ----
@@ -182,6 +183,11 @@ export const assetHoldings = pgTable("asset_holdings", {
   schemeCode: varchar("schemeCode", { length: 20 }),
   units: decimal("units", { precision: 18, scale: 4 }),
   navDate: varchar("navDate", { length: 20 }),
+  // Exchange-traded fields for live price refresh (stocks, ETFs, gold ETFs)
+  ticker: varchar("ticker", { length: 40 }), // e.g. RELIANCE.NS, AAPL, GOLDBEES.NS
+  lastPrice: decimal("lastPrice", { precision: 15, scale: 4 }),
+  priceCurrency: varchar("priceCurrency", { length: 8 }),
+  priceDate: varchar("priceDate", { length: 20 }),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull().$onUpdate(() => new Date()),
 });
@@ -283,6 +289,23 @@ export const expenseBreakdown = pgTable("expense_breakdown", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
+// ---- Net Worth Snapshots (one per user per day) ----
+export const netWorthSnapshots = pgTable(
+  "net_worth_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+    totalAssets: decimal("totalAssets", { precision: 15, scale: 2 }).notNull(),
+    totalLiabilities: decimal("totalLiabilities", { precision: 15, scale: 2 }).notNull(),
+    netWorth: decimal("netWorth", { precision: 15, scale: 2 }).notNull(),
+    // Assets broken down by asset class, e.g. { equity: 100000, debt: 50000 }
+    breakdown: jsonb("breakdown").$type<Record<string, number>>(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("net_worth_snapshots_user_date_idx").on(table.userId, table.date)],
+);
+
 // ---- Chat Messages ----
 export const chatMessages = pgTable("chat_messages", {
   id: serial("id").primaryKey(),
@@ -319,3 +342,5 @@ export type FamilyMember = typeof familyMembers.$inferSelect;
 export type InsertFamilyMember = typeof familyMembers.$inferInsert;
 export type ExpenseBreakdown = typeof expenseBreakdown.$inferSelect;
 export type InsertExpenseBreakdown = typeof expenseBreakdown.$inferInsert;
+export type NetWorthSnapshot = typeof netWorthSnapshots.$inferSelect;
+export type InsertNetWorthSnapshot = typeof netWorthSnapshots.$inferInsert;

@@ -9,6 +9,7 @@ import {
   investmentAllocations,
   taxProfiles,
   retirementModels,
+  netWorthSnapshots,
 } from "@db/schema";
 import { eq } from "drizzle-orm";
 
@@ -38,7 +39,7 @@ export const exportRouter = createRouter({
     const userId = ctx.user.id;
 
     // Fetch all data in parallel
-    const [profile, fProfile, goalList, cashFlows, holdings, allocations, tax, retirement] =
+    const [profile, fProfile, goalList, cashFlows, holdings, allocations, tax, retirement, snapshots] =
       await Promise.all([
         db.query.userProfiles.findFirst({ where: eq(userProfiles.userId, userId) }),
         db.query.financialProfiles.findFirst({ where: eq(financialProfiles.userId, userId) }),
@@ -51,6 +52,10 @@ export const exportRouter = createRouter({
         db.query.investmentAllocations.findMany({ where: eq(investmentAllocations.userId, userId) }),
         db.query.taxProfiles.findFirst({ where: eq(taxProfiles.userId, userId) }),
         db.query.retirementModels.findFirst({ where: eq(retirementModels.userId, userId) }),
+        db.query.netWorthSnapshots.findMany({
+          where: eq(netWorthSnapshots.userId, userId),
+          orderBy: (s, { asc }) => [asc(s.date)],
+        }),
       ]);
 
     const sections: string[] = [];
@@ -140,6 +145,17 @@ export const exportRouter = createRouter({
             h.riskScore,
             h.taxTreatment,
           ]),
+        ),
+      );
+    }
+
+    // --- Net Worth History ---
+    if (snapshots.length > 0) {
+      sections.push("\n--- NET WORTH HISTORY ---");
+      sections.push(
+        toCsv(
+          ["Date", "Total Assets", "Total Liabilities", "Net Worth"],
+          snapshots.map((s) => [s.date, s.totalAssets, s.totalLiabilities, s.netWorth]),
         ),
       );
     }

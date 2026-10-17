@@ -57,8 +57,9 @@ const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 /**
  * Fetch latest INR-based exchange rates from a free public API.
  * Falls back to hardcoded rates if API is unavailable.
+ * Exported so other routers (e.g. asset live-price refresh) can convert to INR.
  */
-async function getINRRates(): Promise<Record<string, number>> {
+export async function getINRRates(): Promise<Record<string, number>> {
   const now = Date.now();
   if (cachedRates && now - cacheTimestamp < CACHE_TTL) {
     return cachedRates;

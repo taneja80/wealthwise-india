@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { localUsers, userProfiles, financialProfiles, goals, cashFlowProjections, investmentAllocations, assetHoldings, taxProfiles, retirementModels, assetProjections, chatMessages, recurringTransactions, familyMembers, expenseBreakdown } from "./schema";
+import { localUsers, userProfiles, financialProfiles, goals, cashFlowProjections, investmentAllocations, assetHoldings, taxProfiles, retirementModels, assetProjections, chatMessages, recurringTransactions, familyMembers, expenseBreakdown, netWorthSnapshots } from "./schema";
 
 export const localUsersRelations = relations(localUsers, ({ many }) => ({
   goals: many(goals),
@@ -11,6 +11,7 @@ export const localUsersRelations = relations(localUsers, ({ many }) => ({
   recurringTransactions: many(recurringTransactions),
   familyMembers: many(familyMembers),
   expenseBreakdown: many(expenseBreakdown),
+  netWorthSnapshots: many(netWorthSnapshots),
 }));
 
 export const userProfilesRelations = relations(userProfiles, () => ({}));
@@ -44,4 +45,8 @@ export const familyMembersRelations = relations(familyMembers, ({ one }) => ({
 
 export const expenseBreakdownRelations = relations(expenseBreakdown, ({ one }) => ({
   user: one(localUsers, { fields: [expenseBreakdown.userId], references: [localUsers.id] }),
+}));
+
+export const netWorthSnapshotsRelations = relations(netWorthSnapshots, ({ one }) => ({
+  user: one(localUsers, { fields: [netWorthSnapshots.userId], references: [localUsers.id] }),
 }));
