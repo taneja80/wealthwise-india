@@ -123,7 +123,7 @@ export default function MFSearchPage() {
       instrument: detail.schemeName,
       currentValue: 0,
       monthlySip: 0,
-      expectedReturn: detail.performance["3Y"] ?? detail.performance["1Y"] ?? 10,
+      expectedReturn: detail.performance["1Y"] ?? 10,
       riskScore: 5,
       taxTreatment: "equity_ltcg",
       schemeCode: detail.schemeCode,

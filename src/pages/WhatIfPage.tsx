@@ -236,7 +236,6 @@ function ScenarioPanel({
   onRemove,
   onDuplicate,
   canRemove,
-  index: _index,
 }: {
   params: ScenarioParams;
   onChange: (p: ScenarioParams) => void;
@@ -555,10 +554,12 @@ export default function WhatIfPage() {
     const rows: any[] = [];
     for (let y = 1; y <= maxYears; y++) {
       const row: any = { year: y };
-      for (const proj of projections) {
+      // Key by scenario index, not name — duplicate names would otherwise
+      // overwrite each other's series in the chart.
+      projections.forEach((proj, i) => {
         const point = proj.data.find((d) => d.year === y);
-        row[proj.params.name] = point?.netWorth ?? null;
-      }
+        row[`s${i}`] = point?.netWorth ?? null;
+      });
       rows.push(row);
     }
     return rows;
@@ -694,11 +695,12 @@ export default function WhatIfPage() {
                         <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCompact(v)} />
                         <ReTooltip content={<CustomTooltip />} />
                         <Legend />
-                        {scenarios.map((s) => (
+                        {scenarios.map((s, i) => (
                           <Line
-                            key={s.name}
+                            key={`s${i}`}
                             type="monotone"
-                            dataKey={s.name}
+                            dataKey={`s${i}`}
+                            name={s.name}
                             stroke={s.color}
                             strokeWidth={2}
                             dot={false}

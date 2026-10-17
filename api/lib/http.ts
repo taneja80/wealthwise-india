@@ -26,6 +26,9 @@ export class HttpClient {
       ...rest
     } = config;
 
+    const requestBody: RequestInit["body"] | undefined =
+      body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body);
+
     const url = new URL(`${this.baseUrl}${endpoint}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) =>
@@ -41,7 +44,7 @@ export class HttpClient {
         ...rest,
         method,
         headers: { ...this.defaultHeaders, ...headers },
-        body: body ? JSON.stringify(body) : undefined,
+        body: requestBody,
         signal: controller.signal,
       });
 
@@ -50,16 +53,19 @@ export class HttpClient {
       if (!response.ok) {
         const errorData = (await response
           .json()
-          .catch(() => ({}))) as Record<string, string>;
+          .catch(() => ({}))) as Record<string, string | undefined>;
         throw new Error(errorData.message || `HTTP Error: ${response.status}`);
       }
 
       return (await response.json()) as T;
-    } catch (error: any) {
-      if (error.name === "AbortError") {
-        throw new Error("Request timeout");
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Request timeout", { cause: error });
       }
-      throw error;
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Request failed", { cause: error });
     }
   }
 
@@ -71,7 +77,7 @@ export class HttpClient {
     return this.request<T>(url, { ...config, method: "GET", params });
   }
 
-  post<T>(url: string, body?: any, config?: RequestConfig) {
+  post<T>(url: string, body?: RequestInit["body"], config?: RequestConfig) {
     return this.request<T>(url, { ...config, method: "POST", body });
   }
 }

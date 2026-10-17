@@ -1,4 +1,5 @@
-import { createBrowserRouter, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
+import type { ReactNode } from "react";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
@@ -22,6 +23,25 @@ import RecurringPage from "./pages/RecurringPage";
 import FamilyPage from "./pages/FamilyPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import { AppLayout } from "./components/Navigation";
+import { useAuth } from "./hooks/useAuth";
+
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#d4a843] border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 const router = createBrowserRouter([
   { path: "/", element: <Home /> },
@@ -29,25 +49,25 @@ const router = createBrowserRouter([
   {
     element: <AppLayout />,
     children: [
-      { path: "/dashboard", element: <Dashboard /> },
-      { path: "/profile-setup", element: <ProfileSetup /> },
-      { path: "/financial-profile", element: <FinancialProfile /> },
-      { path: "/goals", element: <GoalsPage /> },
-      { path: "/cash-flow", element: <CashFlowPage /> },
-      { path: "/allocation", element: <AllocationPage /> },
-      { path: "/advisor", element: <ChatPage /> },
-      { path: "/tax-planning", element: <TaxPage /> },
-      { path: "/assets", element: <AssetPage /> },
-      { path: "/retirement", element: <RetirementPage /> },
-      { path: "/import", element: <ImportPage /> },
-      { path: "/sip-calculator", element: <SIPCalculatorPage /> },
-      { path: "/emi-calculator", element: <EMICalculatorPage /> },
-      { path: "/currency", element: <CurrencyPage /> },
-      { path: "/mf-search", element: <MFSearchPage /> },
-      { path: "/what-if", element: <WhatIfPage /> },
-      { path: "/recurring", element: <RecurringPage /> },
-      { path: "/family", element: <FamilyPage /> },
-      { path: "/expenses", element: <ExpensesPage /> },
+      { path: "/dashboard", element: <ProtectedRoute><Dashboard /></ProtectedRoute> },
+      { path: "/profile-setup", element: <ProtectedRoute><ProfileSetup /></ProtectedRoute> },
+      { path: "/financial-profile", element: <ProtectedRoute><FinancialProfile /></ProtectedRoute> },
+      { path: "/goals", element: <ProtectedRoute><GoalsPage /></ProtectedRoute> },
+      { path: "/cash-flow", element: <ProtectedRoute><CashFlowPage /></ProtectedRoute> },
+      { path: "/allocation", element: <ProtectedRoute><AllocationPage /></ProtectedRoute> },
+      { path: "/advisor", element: <ProtectedRoute><ChatPage /></ProtectedRoute> },
+      { path: "/tax-planning", element: <ProtectedRoute><TaxPage /></ProtectedRoute> },
+      { path: "/assets", element: <ProtectedRoute><AssetPage /></ProtectedRoute> },
+      { path: "/retirement", element: <ProtectedRoute><RetirementPage /></ProtectedRoute> },
+      { path: "/import", element: <ProtectedRoute><ImportPage /></ProtectedRoute> },
+      { path: "/sip-calculator", element: <ProtectedRoute><SIPCalculatorPage /></ProtectedRoute> },
+      { path: "/emi-calculator", element: <ProtectedRoute><EMICalculatorPage /></ProtectedRoute> },
+      { path: "/currency", element: <ProtectedRoute><CurrencyPage /></ProtectedRoute> },
+      { path: "/mf-search", element: <ProtectedRoute><MFSearchPage /></ProtectedRoute> },
+      { path: "/what-if", element: <ProtectedRoute><WhatIfPage /></ProtectedRoute> },
+      { path: "/recurring", element: <ProtectedRoute><RecurringPage /></ProtectedRoute> },
+      { path: "/family", element: <ProtectedRoute><FamilyPage /></ProtectedRoute> },
+      { path: "/expenses", element: <ProtectedRoute><ExpensesPage /></ProtectedRoute> },
       { path: "*", element: <NotFound /> },
     ],
   },

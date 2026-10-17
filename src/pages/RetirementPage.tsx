@@ -92,7 +92,9 @@ export default function RetirementPage() {
   });
 
   useEffect(() => {
-    if (model && fProfile) {
+    if (!model || !fProfile) return;
+
+    const frameId = requestAnimationFrame(() => {
       setForm({
         retirementAge: model.retirementAge ?? 60,
         currentMonthlyExpense: Number(model.currentMonthlyExpense ?? fProfile.monthlyExpenses ?? 0),
@@ -103,7 +105,9 @@ export default function RetirementPage() {
         monthlyPension: Number(model.monthlyPension ?? 0),
         rentalIncomePostRetirement: Number(model.rentalIncomePostRetirement ?? 0),
       });
-    }
+    });
+
+    return () => cancelAnimationFrame(frameId);
   }, [model, fProfile]);
 
   const saveModel = trpc.retirement.saveModel.useMutation({

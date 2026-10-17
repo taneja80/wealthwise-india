@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Errors } from "./errors";
 import type { AppError } from "./errors";
-import { LocalSession, ErrorMessages, Paths } from "./constants";
+import { LocalSession, Paths } from "./constants";
 
 describe("Errors", () => {
   it("creates a badRequest error with status 400", () => {

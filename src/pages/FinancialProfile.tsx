@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
@@ -53,6 +53,29 @@ export default function FinancialProfile() {
     inflationScenario: "moderate" as const,
     planningHorizon: "30",
   });
+
+  // Prefill with the saved profile so revisiting this page doesn't wipe existing data
+  const { data: existingProfile } = trpc.profile.getFinancialProfile.useQuery();
+  useEffect(() => {
+    if (!existingProfile) return;
+    const frameId = requestAnimationFrame(() => {
+      setFormData((prev) => ({
+        monthlyIncome: prev.monthlyIncome || String(Number(existingProfile.monthlyIncome ?? 0) || ""),
+        monthlyExpenses: prev.monthlyExpenses || String(Number(existingProfile.monthlyExpenses ?? 0) || ""),
+        emergencyFund: prev.emergencyFund || String(Number(existingProfile.emergencyFund ?? 0) || ""),
+        totalAssets: prev.totalAssets || String(Number(existingProfile.totalAssets ?? 0) || ""),
+        totalLiabilities: prev.totalLiabilities || String(Number(existingProfile.totalLiabilities ?? 0) || ""),
+        equityInvestments: prev.equityInvestments || String(Number(existingProfile.equityInvestments ?? 0) || ""),
+        debtInvestments: prev.debtInvestments || String(Number(existingProfile.debtInvestments ?? 0) || ""),
+        realEstate: prev.realEstate || String(Number(existingProfile.realEstate ?? 0) || ""),
+        gold: prev.gold || String(Number(existingProfile.gold ?? 0) || ""),
+        otherAssets: prev.otherAssets || String(Number(existingProfile.otherAssets ?? 0) || ""),
+        inflationScenario: (existingProfile.inflationScenario ?? "moderate") as typeof prev.inflationScenario,
+        planningHorizon: prev.planningHorizon !== "30" ? prev.planningHorizon : String(existingProfile.planningHorizon ?? 30),
+      }));
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [existingProfile]);
 
   const liveNetWorth = useMemo(() => {
     const assets = Number(formData.totalAssets) || 0;

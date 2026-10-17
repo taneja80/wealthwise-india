@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
+import { ensureDbReady } from "./queries/connection";
 import { localUsers } from "@db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -73,7 +73,7 @@ export const localAuthRouter = createRouter({
     .mutation(async ({ input, ctx }) => {
       enforceRateLimit(ctx, "auth", RateLimits.auth);
 
-      const db = getDb();
+      const db = await ensureDbReady();
       const existing = await db.query.localUsers.findFirst({
         where: eq(localUsers.email, input.email),
       });
@@ -108,7 +108,7 @@ export const localAuthRouter = createRouter({
     .mutation(async ({ input, ctx }) => {
       enforceRateLimit(ctx, "auth", RateLimits.auth);
 
-      const db = getDb();
+      const db = await ensureDbReady();
       const user = await db.query.localUsers.findFirst({
         where: eq(localUsers.email, input.email),
       });
@@ -134,7 +134,7 @@ export const localAuthRouter = createRouter({
     if (!token) return null;
     const payload = await verifyLocalToken(token);
     if (!payload) return null;
-    const db = getDb();
+    const db = await ensureDbReady();
     const user = await db.query.localUsers.findFirst({
       where: eq(localUsers.id, payload.userId),
     });
@@ -160,7 +160,7 @@ export const localAuthRouter = createRouter({
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ input, ctx }) => {
       enforceRateLimit(ctx, "auth", RateLimits.auth);
-      const db = getDb();
+      const db = await ensureDbReady();
       const user = await db.query.localUsers.findFirst({
         where: eq(localUsers.email, input.email),
       });
@@ -181,7 +181,7 @@ export const localAuthRouter = createRouter({
     )
     .mutation(async ({ input, ctx }) => {
       enforceRateLimit(ctx, "auth", RateLimits.auth);
-      const db = getDb();
+      const db = await ensureDbReady();
       const user = await db.query.localUsers.findFirst({
         where: eq(localUsers.email, input.email),
       });

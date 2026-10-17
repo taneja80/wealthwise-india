@@ -22,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PieChart as RechartsPie,
   Pie,
@@ -30,6 +30,11 @@ import {
   ResponsiveContainer,
   Tooltip as ReTooltip,
   Legend,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
 import {
   Target,
@@ -66,9 +71,26 @@ function timeAgo(timestamp: number): string {
 
 export default function Dashboard() {
   const { user, isLoading: authLoading } = useAuth({ redirectOnUnauthenticated: true });
+  const utils = trpc.useUtils();
   const { data: userProfile } = trpc.profile.getUserProfile.useQuery(undefined, { enabled: !!user });
   const { data: financialProfile, dataUpdatedAt: fpUpdatedAt } = trpc.profile.getFinancialProfile.useQuery(undefined, { enabled: !!user });
   const { data: goals } = trpc.goals.list.useQuery(undefined, { enabled: !!user });
+  const { data: nwHistory } = trpc.netWorth.history.useQuery(undefined, { enabled: !!user });
+
+  // Record today's net worth snapshot once per page load, refreshing live
+  // valuations first (server throttles external calls to once per 15 min)
+  const snapshotMutation = trpc.netWorth.snapshot.useMutation({
+    onSuccess: () => {
+      utils.netWorth.history.invalidate();
+      utils.asset.listHoldings.invalidate();
+    },
+  });
+  const snapshotFiredRef = useRef(false);
+  useEffect(() => {
+    if (!user || snapshotFiredRef.current) return;
+    snapshotFiredRef.current = true;
+    snapshotMutation.mutate({ refresh: true });
+  }, [user, snapshotMutation]);
 
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
@@ -128,6 +150,23 @@ export default function Dashboard() {
         value: Math.round(value),
         color: ALLOC_COLORS[cls] ?? "#94a3b8",
       }));
+  })();
+
+  const nwTrend = (nwHistory ?? []).map((s) => ({
+    date: s.date,
+    label: new Date(`${s.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    netWorth: s.netWorth,
+    totalAssets: s.totalAssets,
+    totalLiabilities: s.totalLiabilities,
+  }));
+
+  const nwChange = (() => {
+    if (nwTrend.length < 2) return null;
+    const first = nwTrend[0];
+    const last = nwTrend[nwTrend.length - 1];
+    const delta = last.netWorth - first.netWorth;
+    const pct = first.netWorth !== 0 ? (delta / Math.abs(first.netWorth)) * 100 : 0;
+    return { delta, pct, since: first.label };
   })();
 
   if (authLoading) {
@@ -312,6 +351,87 @@ export default function Dashboard() {
             );
           })}
         </div>
+
+        {/* Net Worth Trend */}
+        {hasProfile && nwTrend.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <CardTitle className="text-lg cursor-help flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-[#d4a843]" />
+                        Net Worth Trend
+                        <Info className="w-3.5 h-3.5 text-muted-foreground/40" />
+                      </CardTitle>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-xs">
+                      <p>A snapshot of your net worth (assets minus liabilities) is recorded each day you visit, so you can see how your wealth grows over time.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  {nwChange && (
+                    <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${
+                      nwChange.delta >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                    }`}>
+                      {nwChange.delta >= 0 ? "+" : "−"}{formatCompact(Math.abs(nwChange.delta))}
+                      {" "}({nwChange.delta >= 0 ? "+" : ""}{nwChange.pct.toFixed(1)}%) since {nwChange.since}
+                    </span>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[260px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={nwTrend} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="nwGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#d4a843" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#d4a843" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: number) => formatCompact(v)}
+                        width={64}
+                      />
+                      <ReTooltip
+                        formatter={(value: number | string | readonly (number | string)[] | undefined, name: number | string | undefined) => {
+                          const nextValue = Array.isArray(value) ? value[0] : value;
+                          const numeric = typeof nextValue === "number" ? nextValue : Number(nextValue ?? 0);
+                          const label = name === "netWorth" ? "Net Worth" : name === "totalAssets" ? "Assets" : "Liabilities";
+                          return [`₹${numeric.toLocaleString("en-IN")}`, label];
+                        }}
+                        labelFormatter={(_label, payload) => {
+                          const row = Array.isArray(payload) && payload.length > 0 ? payload[0]?.payload : undefined;
+                          return row?.date ?? _label;
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="netWorth"
+                        stroke="#d4a843"
+                        strokeWidth={2.5}
+                        fill="url(#nwGradient)"
+                        dot={nwTrend.length <= 31 ? { r: 3, fill: "#d4a843" } : false}
+                        activeDot={{ r: 5 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                {nwTrend.length === 1 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    First snapshot recorded today — keep visiting and your wealth trend will appear here.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {/* Financial Health Score & Insights */}
         {hasProfile && (

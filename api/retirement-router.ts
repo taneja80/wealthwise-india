@@ -32,7 +32,7 @@ export const retirementRouter = createRouter({
       const existing = await db.query.retirementModels.findFirst({
         where: eq(retirementModels.userId, ctx.user.id),
       });
-      const data: Record<string, any> = {
+      const data: Record<string, string | number | boolean | Date | null | undefined> = {
         retirementAge: input.retirementAge,
         currentMonthlyExpense: String(input.currentMonthlyExpense),
         postRetirementExpensePercent: input.postRetirementExpensePercent,

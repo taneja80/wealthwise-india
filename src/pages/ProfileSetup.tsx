@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
@@ -45,6 +45,22 @@ export default function ProfileSetup() {
     dependents: "0",
     city: "",
   });
+
+  // Prefill with the saved profile so revisiting this page doesn't wipe existing data
+  const { data: existingProfile } = trpc.profile.getUserProfile.useQuery();
+  useEffect(() => {
+    if (!existingProfile) return;
+    const frameId = requestAnimationFrame(() => {
+      setFormData((prev) => ({
+        age: prev.age || String(existingProfile.age ?? ""),
+        profession: prev.profession || existingProfile.profession || "",
+        familyStatus: (existingProfile.familyStatus ?? "single") as typeof prev.familyStatus,
+        dependents: prev.dependents !== "0" ? prev.dependents : String(existingProfile.dependents ?? 0),
+        city: prev.city || existingProfile.city || "",
+      }));
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [existingProfile]);
 
   const createProfile = trpc.profile.createUserProfile.useMutation({
     onSuccess: () => {

@@ -31,6 +31,17 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
 
+const ASSET_CLASS_VALUES = ["equity", "debt", "gold", "real_estate", "liquid", "international"] as const;
+const TAX_TREATMENT_VALUES = [
+  "equity_ltcg",
+  "debt_interest",
+  "debt_ltcg",
+  "gold_ltcg",
+  "real_estate_ltcg",
+  "tax_free",
+  "epf_tax_deferred",
+] as const;
+
 const assetClassNames: Record<string, string> = {
   equity: "Equity",
   debt: "Debt",
@@ -39,6 +50,12 @@ const assetClassNames: Record<string, string> = {
   liquid: "Liquid",
   international: "International",
 };
+
+type AssetClass = (typeof ASSET_CLASS_VALUES)[number];
+type TaxTreatment = (typeof TAX_TREATMENT_VALUES)[number];
+
+const isAssetClass = (value: string): value is AssetClass => ASSET_CLASS_VALUES.includes(value as AssetClass);
+const isTaxTreatment = (value: string): value is TaxTreatment => TAX_TREATMENT_VALUES.includes(value as TaxTreatment);
 
 const SAMPLE_CAS = `Scheme Name,Current Value,Monthly SIP
 SBI Bluechip Fund - Growth,125000,5000
@@ -103,10 +120,10 @@ export default function ImportPage() {
         instrument: h.instrument,
         currentValue: h.currentValue,
         monthlySip: h.monthlySip,
-        assetClass: h.assetClass as any,
+        assetClass: isAssetClass(h.assetClass) ? h.assetClass : "equity",
         expectedReturn: h.expectedReturn,
         riskScore: h.riskScore,
-        taxTreatment: h.taxTreatment as any,
+        taxTreatment: isTaxTreatment(h.taxTreatment) ? h.taxTreatment : "equity_ltcg",
       })),
       replaceExisting,
     });

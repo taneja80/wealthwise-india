@@ -100,8 +100,11 @@ export default function AssetPage() {
   const { data: frontier } = trpc.asset.getEfficientFrontier.useQuery();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [refreshAllStatus, setRefreshAllStatus] = useState<null | { updated: number; errors: string[] }>(null);
+  const [refreshPriceStatus, setRefreshPriceStatus] = useState<null | { updated: number; errors: string[] }>(null);
   const [schemeSearch, setSchemeSearch] = useState("");
   const [schemeSearchTerm, setSchemeSearchTerm] = useState("");
+  const [tickerSearch, setTickerSearch] = useState("");
+  const [tickerSearchTerm, setTickerSearchTerm] = useState("");
   const [form, setForm] = useState({
     assetClass: "equity" as const,
     instrument: "",
@@ -111,6 +114,7 @@ export default function AssetPage() {
     taxTreatment: "equity_ltcg" as const,
     schemeCode: "",
     units: "",
+    ticker: "",
   });
 
   const createHolding = trpc.asset.createHolding.useMutation({
@@ -121,7 +125,9 @@ export default function AssetPage() {
       setDialogOpen(false);
       setSchemeSearch("");
       setSchemeSearchTerm("");
-      setForm({ assetClass: "equity", instrument: "", currentValue: "", monthlySip: "", expectedReturn: "12", taxTreatment: "equity_ltcg", schemeCode: "", units: "" });
+      setTickerSearch("");
+      setTickerSearchTerm("");
+      setForm({ assetClass: "equity", instrument: "", currentValue: "", monthlySip: "", expectedReturn: "12", taxTreatment: "equity_ltcg", schemeCode: "", units: "", ticker: "" });
     },
   });
 
@@ -147,6 +153,35 @@ export default function AssetPage() {
       setTimeout(() => setRefreshAllStatus(null), 5000);
     },
   });
+
+  const refreshPrice = trpc.asset.refreshPrice.useMutation({
+    onSuccess: () => {
+      utils.asset.listHoldings.invalidate();
+      utils.asset.projectByAssetClass.invalidate();
+    },
+  });
+
+  const refreshPrices = trpc.asset.refreshPrices.useMutation({
+    onSuccess: (data) => {
+      utils.asset.listHoldings.invalidate();
+      utils.asset.projectByAssetClass.invalidate();
+      setRefreshPriceStatus({ updated: data.updated, errors: data.errors });
+      setTimeout(() => setRefreshPriceStatus(null), 5000);
+    },
+  });
+
+  const refreshingAll = refreshAllNAV.isPending || refreshPrices.isPending;
+  const handleRefreshAll = () => {
+    refreshAllNAV.mutate();
+    refreshPrices.mutate();
+  };
+  const refreshErrorCount =
+    (refreshAllStatus?.errors.length ?? 0) + (refreshPriceStatus?.errors.length ?? 0);
+
+  const { data: tickerResults } = trpc.asset.searchTicker.useQuery(
+    { query: tickerSearchTerm },
+    { enabled: tickerSearchTerm.length >= 2 },
+  );
 
   const { data: schemeResults } = trpc.mf.search.useQuery(
     { query: schemeSearchTerm, limit: 8 },
@@ -178,11 +213,14 @@ export default function AssetPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {refreshAllStatus && (
+            {(refreshAllStatus || refreshPriceStatus) && (
               <span className="text-xs text-emerald-600 flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                {refreshAllStatus.updated} NAVs updated
-                {refreshAllStatus.errors.length > 0 && ` · ${refreshAllStatus.errors.length} errors`}
+                {[
+                  refreshAllStatus && `${refreshAllStatus.updated} NAVs`,
+                  refreshPriceStatus && `${refreshPriceStatus.updated} live prices`,
+                ].filter(Boolean).join(" + ")} updated
+                {refreshErrorCount > 0 && ` · ${refreshErrorCount} failed`}
               </span>
             )}
             <Tooltip>
@@ -190,16 +228,16 @@ export default function AssetPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => refreshAllNAV.mutate()}
-                  disabled={refreshAllNAV.isPending}
+                  onClick={handleRefreshAll}
+                  disabled={refreshingAll}
                   className="gap-1.5"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${refreshAllNAV.isPending ? "animate-spin" : ""}`} />
-                  {refreshAllNAV.isPending ? "Refreshing..." : "Refresh All NAVs"}
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshingAll ? "animate-spin" : ""}`} />
+                  {refreshingAll ? "Refreshing..." : "Refresh Valuations"}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs max-w-xs">
-                Fetches latest NAV from AMFI for all holdings that have a scheme code and units recorded
+                Updates every linked holding: latest NAV from AMFI for mutual funds, live market price for stocks & ETFs (foreign prices converted to INR)
               </TooltipContent>
             </Tooltip>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -274,6 +312,57 @@ export default function AssetPage() {
                   </div>
                 )}
 
+                {/* Stock/ETF Ticker Search — for exchange-traded classes */}
+                {(form.assetClass === "equity" || form.assetClass === "international" || form.assetClass === "gold") && (
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <Search className="w-3 h-3" />
+                      Search Stock / ETF Ticker <span className="text-muted-foreground font-normal">(optional — for live price)</span>
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="e.g., Reliance, AAPL, Gold BeES"
+                        value={tickerSearch}
+                        onChange={(e) => setTickerSearch(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") setTickerSearchTerm(tickerSearch); }}
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={() => setTickerSearchTerm(tickerSearch)}>
+                        <Search className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    {tickerResults && tickerResults.length > 0 && !form.ticker && (
+                      <div className="border rounded-lg overflow-hidden divide-y max-h-48 overflow-y-auto">
+                        {tickerResults.map((t) => (
+                          <button
+                            key={t.symbol}
+                            type="button"
+                            onClick={() => {
+                              setForm({
+                                ...form,
+                                instrument: form.instrument || t.name,
+                                ticker: t.symbol,
+                              });
+                              setTickerSearch(t.name);
+                              setTickerSearchTerm("");
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors"
+                          >
+                            <p className="font-medium text-[#0f1a2e] truncate">{t.name}</p>
+                            <p className="text-muted-foreground">{t.symbol} · {t.exchange} · {t.quoteType}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {form.ticker && (
+                      <div className="flex items-center gap-2 px-2 py-1.5 bg-emerald-50 rounded-lg text-xs text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Linked to ticker <strong>{form.ticker}</strong> — value will track the live market price</span>
+                        <button type="button" onClick={() => { setForm({ ...form, ticker: "", units: form.schemeCode ? form.units : "" }); setTickerSearch(""); }} className="ml-auto text-emerald-600 hover:text-emerald-800 underline">Remove</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label>Instrument Name</Label>
                   <Input placeholder="e.g., Nifty 50 Index Fund" value={form.instrument} onChange={(e) => setForm({ ...form, instrument: e.target.value })} />
@@ -289,10 +378,10 @@ export default function AssetPage() {
                   </div>
                 </div>
 
-                {/* Units — shown when scheme code is linked */}
-                {form.schemeCode && (
+                {/* Units — shown when scheme code or ticker is linked */}
+                {(form.schemeCode || form.ticker) && (
                   <div className="space-y-2">
-                    <Label>Units held</Label>
+                    <Label>Units / shares held</Label>
                     <Input
                       type="number"
                       step="0.0001"
@@ -301,7 +390,9 @@ export default function AssetPage() {
                       onChange={(e) => setForm({ ...form, units: e.target.value })}
                     />
                     <p className="text-xs text-muted-foreground">
-                      From your CAS statement. Current Value will be auto-calculated as Units × Latest NAV on refresh.
+                      {form.ticker
+                        ? "Number of shares/units you hold. Current Value will be auto-calculated as Units × Live Price on refresh."
+                        : "From your CAS statement. Current Value will be auto-calculated as Units × Latest NAV on refresh."}
                     </p>
                   </div>
                 )}
@@ -332,6 +423,7 @@ export default function AssetPage() {
                   taxTreatment: form.taxTreatment,
                   schemeCode: form.schemeCode || undefined,
                   units: form.units ? Number(form.units) : undefined,
+                  ticker: form.ticker || undefined,
                 })} disabled={createHolding.isPending || !form.instrument || !form.currentValue} className="w-full bg-[#1a2744]">
                   {createHolding.isPending ? "Adding..." : "Add Holding"}
                 </Button>
@@ -402,6 +494,24 @@ export default function AssetPage() {
                               </TooltipContent>
                             </Tooltip>
                           )}
+                          {h.ticker && h.units && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  disabled={refreshPrice.isPending}
+                                  onClick={() => refreshPrice.mutate({ id: h.id })}
+                                >
+                                  <RefreshCw className={`w-3 h-3 text-blue-500 ${refreshPrice.isPending ? "animate-spin" : ""}`} />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Refresh live market price ({h.ticker})
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteHolding.mutate({ id: h.id })}>
                             <Trash2 className="w-3 h-3 text-red-400" />
                           </Button>
@@ -420,6 +530,21 @@ export default function AssetPage() {
                             {h.schemeCode && <span className="ml-1 text-[#d4a843]">· #{h.schemeCode}</span>}
                           </span>
                           {h.navDate && <span className="text-muted-foreground/70">NAV: {h.navDate}</span>}
+                        </div>
+                      )}
+                      {h.ticker && (
+                        <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            {h.units ? `${Number(h.units).toLocaleString("en-IN", { maximumFractionDigits: 3 })} × ` : ""}
+                            <span className="text-blue-600 font-medium">{h.ticker}</span>
+                            {h.lastPrice && (
+                              <span className="ml-1">
+                                @ {h.priceCurrency && h.priceCurrency !== "INR" ? `${h.priceCurrency} ` : "₹"}
+                                {Number(h.lastPrice).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                              </span>
+                            )}
+                          </span>
+                          {h.priceDate && <span className="text-muted-foreground/70">as of {h.priceDate}</span>}
                         </div>
                       )}
                     </CardContent>

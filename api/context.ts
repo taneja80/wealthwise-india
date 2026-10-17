@@ -1,6 +1,6 @@
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import { verifyLocalToken } from "./local-auth-router";
-import { getDb } from "./queries/connection";
+import { ensureDbReady } from "./queries/connection";
 import { localUsers } from "@db/schema";
 import { LocalSession } from "@contracts/constants";
 import { eq } from "drizzle-orm";
@@ -32,7 +32,7 @@ export async function createContext(
     if (localToken) {
       const payload = await verifyLocalToken(localToken);
       if (payload) {
-        const db = getDb();
+        const db = await ensureDbReady();
         const rows = await db.select().from(localUsers).where(eq(localUsers.id, payload.userId)).limit(1);
         if (rows.length > 0) {
           const u = rows[0];

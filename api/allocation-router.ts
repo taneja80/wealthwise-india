@@ -4,6 +4,12 @@ import { getDb } from "./queries/connection";
 import { investmentAllocations, goals } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 
+const assetClassValues = ["equity", "debt", "gold", "real_estate", "liquid", "international"] as const;
+const riskLevels = ["conservative", "moderate", "aggressive"] as const;
+
+type AssetClass = (typeof assetClassValues)[number];
+type RiskLevel = (typeof riskLevels)[number];
+
 const assetClassReturns: Record<string, number> = {
   equity: 12,
   debt: 7,
@@ -12,6 +18,9 @@ const assetClassReturns: Record<string, number> = {
   liquid: 4,
   international: 11,
 };
+
+const isAssetClass = (value: string): value is AssetClass => assetClassValues.includes(value as AssetClass);
+const isRiskLevel = (value: string): value is RiskLevel => riskLevels.includes(value as RiskLevel);
 
 function getAllocationForGoal(
   category: string,
@@ -138,16 +147,18 @@ export const allocationRouter = createRouter({
         );
 
         for (const alloc of allocations) {
+          const assetClass = isAssetClass(alloc.assetClass) ? alloc.assetClass : "equity";
+          const riskLevel = isRiskLevel(alloc.riskLevel) ? alloc.riskLevel : "moderate";
           const [inserted] = await tx
             .insert(investmentAllocations)
             .values({
               userId: ctx.user.id,
               goalId: goal.id,
-              assetClass: alloc.assetClass as any,
+              assetClass,
               allocationPercent: String(alloc.allocationPercent),
               recommendedAmount: String(alloc.recommendedAmount),
               expectedReturn: String(alloc.expectedReturn),
-              riskLevel: alloc.riskLevel as any,
+              riskLevel,
             })
             .returning({ id: investmentAllocations.id });
           allAllocations.push({

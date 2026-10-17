@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TRPCError } from "@trpc/server";
+import type { TrpcContext } from "../context";
 
 // We need to test the rate limiter with a fresh module state for isolation
 // Since the store is module-level, we re-import each time
@@ -18,13 +19,16 @@ describe("rate-limit", () => {
     vi.restoreAllMocks();
   });
 
-  function fakeCtx(userId?: number) {
+  function fakeCtx(userId?: number): TrpcContext {
     return {
-      user: userId ? { id: userId, role: "user" as const } : null,
-      req: {
+      user: userId
+        ? { id: userId, name: "Test User", email: "test@example.com", role: "user" }
+        : undefined,
+      req: new Request("https://example.com", {
         headers: new Headers({ "x-forwarded-for": "1.2.3.4" }),
-      },
-    } as any;
+      }),
+      resHeaders: new Headers(),
+    };
   }
 
   it("allows requests within the rate limit", () => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,18 +41,42 @@ export default function TaxPage() {
   const { data: profile } = trpc.tax.getProfile.useQuery();
 
   const [form, setForm] = useState({
-    regime: (profile?.regime ?? "old") as "old" | "new",
-    section80c: Number(profile?.section80c ?? 0),
-    section80dSelf: Number(profile?.section80dSelf ?? 0),
-    section80dParents: Number(profile?.section80dParents ?? 0),
-    section80ccd1b: Number(profile?.section80ccd1b ?? 0),
-    section24b: Number(profile?.section24b ?? 0),
-    hraExemption: Number(profile?.hraExemption ?? 0),
-    hasNps: profile?.hasNps ?? false,
-    hasPpf: profile?.hasPpf ?? false,
-    hasHealthInsurance: profile?.hasHealthInsurance ?? false,
-    parentsSeniorCitizen: profile?.parentsSeniorCitizen ?? false,
+    regime: "old" as "old" | "new",
+    section80c: 0,
+    section80dSelf: 0,
+    section80dParents: 0,
+    section80ccd1b: 0,
+    section24b: 0,
+    hraExemption: 0,
+    hasNps: false,
+    hasPpf: false,
+    hasHealthInsurance: false,
+    parentsSeniorCitizen: false,
   });
+
+  // Populate the form once the saved profile loads (query data is undefined on first render)
+  useEffect(() => {
+    if (!profile) return;
+
+    const frameId = requestAnimationFrame(() => {
+      setForm((prev) => ({
+        ...prev,
+        regime: (profile.regime ?? "old") as "old" | "new",
+        section80c: Number(profile.section80c ?? 0),
+        section80dSelf: Number(profile.section80dSelf ?? 0),
+        section80dParents: Number(profile.section80dParents ?? 0),
+        section80ccd1b: Number(profile.section80ccd1b ?? 0),
+        section24b: Number(profile.section24b ?? 0),
+        hraExemption: Number(profile.hraExemption ?? 0),
+        hasNps: profile.hasNps ?? false,
+        hasPpf: profile.hasPpf ?? false,
+        hasHealthInsurance: profile.hasHealthInsurance ?? false,
+        parentsSeniorCitizen: profile.parentsSeniorCitizen ?? false,
+      }));
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [profile]);
 
   const saveProfile = trpc.tax.saveProfile.useMutation({
     onSuccess: () => {
@@ -203,7 +227,7 @@ export default function TaxPage() {
                         Under the new tax regime, most deductions are not allowed except:
                       </p>
                       <ul className="text-sm text-blue-700 mt-2 space-y-1 list-disc list-inside">
-                        <li>Standard deduction: ₹50,000</li>
+                        <li>Standard deduction: ₹75,000</li>
                         <li>Employer NPS contribution (80CCD(2)): Up to 10% of salary</li>
                         <li>Home loan interest for rented property</li>
                       </ul>
@@ -317,7 +341,7 @@ export default function TaxPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Info className="w-4 h-4 text-[#d4a843]" />
-                  Tax Slabs FY 2024-25
+                  Tax Slabs FY 2025-26
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -329,16 +353,18 @@ export default function TaxPage() {
                     <span className="text-muted-foreground">₹5L – ₹10L</span><span>20%</span>
                     <span className="text-muted-foreground">Above ₹10L</span><span>30%</span>
                   </div>
-                  <p className="font-medium text-sm mt-3">New Regime:</p>
+                  <p className="font-medium text-sm mt-3">New Regime (Budget 2025):</p>
                   <div className="grid grid-cols-2 gap-1">
-                    <span className="text-muted-foreground">0 – ₹3L</span><span>Nil</span>
-                    <span className="text-muted-foreground">₹3L – ₹6L</span><span>5%</span>
-                    <span className="text-muted-foreground">₹6L – ₹9L</span><span>10%</span>
-                    <span className="text-muted-foreground">₹9L – ₹12L</span><span>15%</span>
-                    <span className="text-muted-foreground">₹12L – ₹15L</span><span>20%</span>
-                    <span className="text-muted-foreground">Above ₹15L</span><span>30%</span>
+                    <span className="text-muted-foreground">0 – ₹4L</span><span>Nil</span>
+                    <span className="text-muted-foreground">₹4L – ₹8L</span><span>5%</span>
+                    <span className="text-muted-foreground">₹8L – ₹12L</span><span>10%</span>
+                    <span className="text-muted-foreground">₹12L – ₹16L</span><span>15%</span>
+                    <span className="text-muted-foreground">₹16L – ₹20L</span><span>20%</span>
+                    <span className="text-muted-foreground">₹20L – ₹24L</span><span>25%</span>
+                    <span className="text-muted-foreground">Above ₹24L</span><span>30%</span>
                   </div>
                   <p className="text-muted-foreground mt-2">+ 4% Health & Education Cess on all regimes</p>
+                  <p className="text-muted-foreground">New regime: no tax up to ₹12L taxable income (Section 87A rebate)</p>
                 </div>
               </CardContent>
             </Card>

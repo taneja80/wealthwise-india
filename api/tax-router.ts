@@ -45,22 +45,22 @@ function calculateTax(income: number, slabs: typeof OLD_REGIME_SLABS): number {
   return tax;
 }
 
-function calculateOldRegimeDeductions(profile: typeof taxProfiles.$inferSelect): number {
-  return Math.min(Number(profile.section80c), 150000) +
-    Math.min(Number(profile.section80dSelf), 25000) +
-    Math.min(Number(profile.section80dParents), profile.parentsSeniorCitizen ? 50000 : 25000) +
-    Math.min(Number(profile.section80ccd1b), 50000) +
-    Math.min(Number(profile.section24b), 200000) +
-    Number(profile.section80e) +
-    Number(profile.section80g) +
-    Number(profile.hraExemption) +
+function calculateOldRegimeDeductions(profile: Partial<typeof taxProfiles.$inferSelect>): number {
+  return Math.min(Number(profile.section80c ?? 0), 150000) +
+    Math.min(Number(profile.section80dSelf ?? 0), 25000) +
+    Math.min(Number(profile.section80dParents ?? 0), profile.parentsSeniorCitizen ? 50000 : 25000) +
+    Math.min(Number(profile.section80ccd1b ?? 0), 50000) +
+    Math.min(Number(profile.section24b ?? 0), 200000) +
+    Number(profile.section80e ?? 0) +
+    Number(profile.section80g ?? 0) +
+    Number(profile.hraExemption ?? 0) +
     (profile.ltaClaimed ? 25000 : 0);
 }
 
 function calculateOldRegimeTaxableIncome(
   annualIncome: number,
   deductions: number,
-  profile: typeof taxProfiles.$inferSelect,
+  profile: Partial<typeof taxProfiles.$inferSelect>,
 ): number {
   const standardDeduction = 50000;
   // NPS employer contribution (80CCD(2)) is separate - up to 10% of salary
@@ -121,7 +121,7 @@ export const taxRouter = createRouter({
       const existing = await db.query.taxProfiles.findFirst({
         where: eq(taxProfiles.userId, ctx.user.id),
       });
-      const data: Record<string, any> = {
+      const data: Record<string, string | number | boolean | Date | null | undefined> = {
         regime: input.regime,
         section80c: String(input.section80c),
         section80dSelf: String(input.section80dSelf),
@@ -159,7 +159,7 @@ export const taxRouter = createRouter({
     if (!fProfile) return null;
 
     const annualIncome = Number(fProfile.monthlyIncome) * 12;
-    const taxProfile = profile ?? {
+    const taxProfile: Partial<typeof taxProfiles.$inferSelect> = profile ?? {
       regime: "old" as const,
       section80c: "0", section80dSelf: "0", section80dParents: "0",
       section80ccd1b: "0", section24b: "0", section80e: "0",
@@ -168,9 +168,9 @@ export const taxRouter = createRouter({
       hasHealthInsurance: false, parentsSeniorCitizen: false,
     };
 
-    const deductions = calculateOldRegimeDeductions(taxProfile as any);
+    const deductions = calculateOldRegimeDeductions(taxProfile);
 
-    const oldRegimeTaxable = calculateOldRegimeTaxableIncome(annualIncome, deductions, taxProfile as any);
+    const oldRegimeTaxable = calculateOldRegimeTaxableIncome(annualIncome, deductions, taxProfile);
     const oldRegimeTaxRaw = calculateTax(oldRegimeTaxable, OLD_REGIME_SLABS);
     const oldRegimeTax = applyRebate(oldRegimeTaxRaw, oldRegimeTaxable, OLD_REGIME_REBATE_LIMIT);
 

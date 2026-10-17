@@ -132,7 +132,7 @@ export const goalsRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const { id, ...rawData } = input;
-      const data: Record<string, any> = { updatedAt: new Date() };
+      const data: Record<string, string | number | Date | null | undefined> = { updatedAt: new Date() };
       if (rawData.name !== undefined) data.name = rawData.name;
       if (rawData.category !== undefined) data.category = rawData.category;
       if (rawData.targetAmount !== undefined) data.targetAmount = String(rawData.targetAmount);

@@ -34,8 +34,8 @@ export default function CurrencyPage() {
     setToCurrency(fromCurrency);
   };
 
-  const rates = ratesData?.rates ?? {};
-  const currencyList = currencies ?? [];
+  const rates = useMemo(() => ratesData?.rates ?? {}, [ratesData?.rates]);
+  const currencyList = useMemo(() => currencies ?? [], [currencies]);
 
   // Popular cross rates for the selected "from" currency
   const crossRates = useMemo(() => {
