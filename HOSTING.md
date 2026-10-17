@@ -8,7 +8,7 @@ and ships with a Render blueprint (`render.yaml`), so hosting is mostly clicking
 1. Sign up at [render.com](https://render.com) with your GitHub account.
 2. Dashboard → **New → Blueprint** → select the `wealthwise-india` repo.
 3. Render detects `render.yaml` and provisions:
-   - **Web service** (free plan) — builds with `npm install --include=dev && npm run build && npx drizzle-kit push --force`, starts with `npm start`
+   - **Web service** (free plan) — builds with `npm install --include=dev && npm run build`; on each boot it syncs the database schema (`drizzle-kit push`) and then starts with `npm start`
    - **Postgres database** (free plan) — connection string is injected as `DATABASE_URL` automatically
    - `JWT_SECRET` is auto-generated
 4. Leave `OLLAMA_URL` / `OLLAMA_MODEL` blank unless you want the AI chat

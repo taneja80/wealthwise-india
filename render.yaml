@@ -4,8 +4,11 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install --include=dev && npm run build && npx drizzle-kit push --force
-    startCommand: npm start
+    # Schema sync runs at startup (not build): on a first blueprint deploy the
+    # database is often still provisioning while the build runs, and the
+    # database is always reachable by the time the service boots.
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npx drizzle-kit push --force --verbose && npm start
     envVars:
       - key: NODE_ENV
         value: production
